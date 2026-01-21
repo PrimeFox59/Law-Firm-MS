@@ -7,6 +7,10 @@ const path = require('path');
 const { Op } = require('sequelize');
 const { getActiveHierarchyTree, getAssignableRolesForUser } = require('../utils/roleHierarchy');
 const { sendNotification, notifications } = require('../utils/whatsappNotifier');
+const useFirestore = process.env.FIRESTORE_ENABLED === 'true';
+const fsTasks = useFirestore ? require('../services/firestore/tasks') : null;
+const fsMatters = useFirestore ? require('../services/firestore/matters') : null;
+const fsUsers = useFirestore ? require('../services/firestore/users') : null;
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
@@ -38,72 +42,81 @@ router.get('/', isAuthenticated, async (req, res) => {
   try {
     const { tab = 'all', search, status, priority, matter_id } = req.query;
     const isAdmin = req.user?.account_type === 'admin';
-    const where = isAdmin ? {} : { assignee_id: req.user.id };
+    const filters = { search, status, priority, matter_id };
 
-    if (tab === 'matter') {
-      where.task_type = 'matter';
-    } else if (tab === 'personal') {
-      where.task_type = 'personal';
-    }
-
-    if (search) {
-      where.title = { [Op.like]: `%${search}%` };
-    }
-
-    if (status) {
-      where.status = status;
-    }
-
-    if (priority) {
-      where.priority = priority;
-    }
-
-    if (matter_id) {
-      where.matter_id = matter_id;
-    }
-
-    // Tasks needing approval (created by current user, not completed)
-    const approvalWhere = {
-      created_by: req.user.id,
-      status: { [Op.not]: 'completed' }
-    };
-
-    const approvalTasks = await Task.findAll({
-      where: approvalWhere,
-      include: [
-        { model: Matter, as: 'matter' },
-        { model: User, as: 'assignee', attributes: ['id', 'full_name', 'account_type'] }
-      ],
-      order: [['updated_at', 'DESC']]
-    });
-
-    // Main task list (respect tab filters; for approval tab, reuse approvalTasks)
+    let approvalTasks;
     let tasks;
-    if (tab === 'approval') {
-      tasks = approvalTasks;
+    let matters;
+
+    if (useFirestore) {
+      approvalTasks = await fsTasks.listApprovals({ userId: req.user.id });
+      tasks = tab === 'approval'
+        ? approvalTasks
+        : await fsTasks.listForUser({ userId: req.user.id, isAdmin, filters });
+      matters = await fsMatters.findAllForUser({ userId: req.user.id, isAdmin, search, status: 'all', dispute: 'all' });
     } else {
-      tasks = await Task.findAll({
-        where,
+      const where = isAdmin ? {} : { assignee_id: req.user.id };
+
+      if (tab === 'matter') {
+        where.task_type = 'matter';
+      } else if (tab === 'personal') {
+        where.task_type = 'personal';
+      }
+
+      if (search) {
+        where.title = { [Op.like]: `%${search}%` };
+      }
+
+      if (status) {
+        where.status = status;
+      }
+
+      if (priority) {
+        where.priority = priority;
+      }
+
+      if (matter_id) {
+        where.matter_id = matter_id;
+      }
+
+      const approvalWhere = {
+        created_by: req.user.id,
+        status: { [Op.not]: 'completed' }
+      };
+
+      approvalTasks = await Task.findAll({
+        where: approvalWhere,
         include: [
           { model: Matter, as: 'matter' },
-          { model: User, as: 'assignee' },
-          { model: User, as: 'creator', attributes: ['id', 'full_name', 'account_type'] }
+          { model: User, as: 'assignee', attributes: ['id', 'full_name', 'account_type'] }
         ],
-        order: [
-          ['priority', 'DESC'],
-          ['due_date', 'ASC']
-        ]
+        order: [['updated_at', 'DESC']]
       });
+
+      tasks = tab === 'approval'
+        ? approvalTasks
+        : await Task.findAll({
+          where,
+          include: [
+            { model: Matter, as: 'matter' },
+            { model: User, as: 'assignee' },
+            { model: User, as: 'creator', attributes: ['id', 'full_name', 'account_type'] }
+          ],
+          order: [
+            ['priority', 'DESC'],
+            ['due_date', 'ASC']
+          ]
+        });
+
+      const mattersFilter = isAdmin ? {} : {
+        [Op.or]: [
+          { created_by: req.user.id },
+          { responsible_attorney_id: req.user.id }
+        ]
+      };
+
+      matters = await Matter.findAll({ where: mattersFilter });
     }
-
-    const mattersFilter = isAdmin ? {} : {
-      [Op.or]: [
-        { created_by: req.user.id },
-        { responsible_attorney_id: req.user.id }
-      ]
-    };
-
-    const matters = await Matter.findAll({ where: mattersFilter });
 
     res.render('tasks/index', {
       title: 'Tasks',
@@ -126,24 +139,34 @@ router.get('/', isAuthenticated, async (req, res) => {
 // Add task page
 router.get('/add', isAuthenticated, async (req, res) => {
   try {
-    const matters = await Matter.findAll({
-      where: {
-        [Op.or]: [
-          { created_by: req.user.id },
-          { responsible_attorney_id: req.user.id }
-        ]
-      }
-    });
+    let matters;
+    let users;
 
-    const tree = await getActiveHierarchyTree();
-    const assignableRoles = getAssignableRolesForUser(tree, req.user.account_type, req.user?.account_type === 'admin');
+    if (useFirestore) {
+      matters = await fsMatters.findAllForUser({ userId: req.user.id, isAdmin: req.user?.account_type === 'admin', search: '', status: 'all', dispute: 'all' });
+      const tree = await getActiveHierarchyTree();
+      const assignableRoles = getAssignableRolesForUser(tree, req.user.account_type, req.user?.account_type === 'admin');
+      users = await fsUsers.listActive({ accountTypes: assignableRoles || undefined });
+    } else {
+      matters = await Matter.findAll({
+        where: {
+          [Op.or]: [
+            { created_by: req.user.id },
+            { responsible_attorney_id: req.user.id }
+          ]
+        }
+      });
 
-    const users = await User.findAll({
-      where: {
-        is_active: true,
-        ...(assignableRoles ? { account_type: { [Op.in]: assignableRoles } } : {})
-      }
-    });
+      const tree = await getActiveHierarchyTree();
+      const assignableRoles = getAssignableRolesForUser(tree, req.user.account_type, req.user?.account_type === 'admin');
+
+      users = await User.findAll({
+        where: {
+          is_active: true,
+          ...(assignableRoles ? { account_type: { [Op.in]: assignableRoles } } : {})
+        }
+      });
+    }
 
     res.render('tasks/form', {
       title: 'Add Task',
@@ -162,20 +185,28 @@ router.get('/add', isAuthenticated, async (req, res) => {
 // Task detail
 router.get('/:id', isAuthenticated, async (req, res) => {
   try {
-    const task = await Task.findByPk(req.params.id, {
-      include: [
-        { model: Matter, as: 'matter' },
-        { model: User, as: 'assignee' },
-        { model: User, as: 'creator' }
-      ]
-    });
+    let task;
+    if (useFirestore) {
+      task = await fsTasks.findById(req.params.id);
+      if (task && task.matter_id) {
+        task.matter = await fsMatters.findById(task.matter_id);
+      }
+    } else {
+      task = await Task.findByPk(req.params.id, {
+        include: [
+          { model: Matter, as: 'matter' },
+          { model: User, as: 'assignee' },
+          { model: User, as: 'creator' }
+        ]
+      });
+    }
 
     if (!task) {
       req.flash('error', 'Task not found');
       return res.redirect('/tasks');
     }
 
-    const documents = await Document.findAll({
+    const documents = useFirestore ? [] : await Document.findAll({
       where: { task_id: req.params.id, is_deleted: false },
       order: [['created_at', 'DESC']]
     });
@@ -226,6 +257,24 @@ router.post('/', isAuthenticated, async (req, res) => {
       hyperlink,
       created_by: req.user.id
     });
+
+    if (useFirestore) {
+      await fsTasks.create({
+        id: newTask.id,
+        task_type,
+        matter_id: matter_id ? String(matter_id) : null,
+        title,
+        description,
+        status,
+        priority,
+        start_date: start_date || null,
+        due_date: due_date || null,
+        assignee_id: assignee_id ? String(assignee_id) : null,
+        notes,
+        hyperlink,
+        created_by: req.user.id ? String(req.user.id) : null
+      });
+    }
 
     // Send notification to assignee (email)
     const assignee = await User.findByPk(assignee_id);
@@ -282,12 +331,17 @@ router.post('/:id/documents', isAuthenticated, handleUpload, async (req, res) =>
 // Update task status
 router.patch('/:id/status', isAuthenticated, async (req, res) => {
   try {
-    const task = await Task.findByPk(req.params.id, {
-      include: [
-        { model: User, as: 'assignee', attributes: ['full_name', 'phone'] },
-        { model: User, as: 'creator', attributes: ['full_name', 'phone'] }
-      ]
-    });
+    let task;
+    if (useFirestore) {
+      task = await fsTasks.findById(req.params.id);
+    } else {
+      task = await Task.findByPk(req.params.id, {
+        include: [
+          { model: User, as: 'assignee', attributes: ['full_name', 'phone'] },
+          { model: User, as: 'creator', attributes: ['full_name', 'phone'] }
+        ]
+      });
+    }
     
     if (!task) {
       return res.status(404).json({ success: false, message: 'Task not found' });
@@ -299,7 +353,11 @@ router.patch('/:id/status', isAuthenticated, async (req, res) => {
     }
 
     const oldStatus = task.status;
-    await task.update({ status: req.body.status });
+    if (useFirestore) {
+      await fsTasks.update(task.id, { status: req.body.status });
+    } else {
+      await task.update({ status: req.body.status });
+    }
 
     // Send notification if task completed (email)
     if (req.body.status === 'completed' && oldStatus !== 'completed') {
@@ -320,13 +378,14 @@ router.patch('/:id/status', isAuthenticated, async (req, res) => {
 // Delete task
 router.delete('/:id', isAuthenticated, async (req, res) => {
   try {
-    const task = await Task.findByPk(req.params.id);
-    
-    if (!task) {
-      return res.status(404).json({ success: false, message: 'Task not found' });
+    if (useFirestore) {
+      await fsTasks.remove(req.params.id);
     }
 
-    await task.destroy();
+    const task = await Task.findByPk(req.params.id);
+    if (task) {
+      await task.destroy();
+    }
     res.json({ success: true, message: 'Task deleted successfully' });
   } catch (error) {
     console.error(error);

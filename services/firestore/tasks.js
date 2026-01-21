@@ -48,9 +48,10 @@ const listApprovals = async ({ userId }) => {
 };
 
 const create = async (data) => {
-  const docRef = getCollection().doc();
+  const docRef = data?.id ? getCollection().doc(String(data.id)) : getCollection().doc();
   const payload = {
     ...data,
+    id: data?.id ? String(data.id) : docRef.id,
     created_at: FieldValue.serverTimestamp(),
     updated_at: FieldValue.serverTimestamp()
   };
@@ -65,10 +66,15 @@ const update = async (id, data) => {
   return { id: doc.id, ...doc.data() };
 };
 
+const remove = async (id) => {
+  await getCollection().doc(String(id)).delete();
+};
+
 module.exports = {
   findById,
   listForUser,
   listApprovals,
   create,
-  update
+  update,
+  remove
 };

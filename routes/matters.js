@@ -7,6 +7,8 @@ const { isAuthenticated } = require('../middleware/auth');
 const { Matter, Contact, User, ChatMessage, Task, Document, Invoice, CostJournal, MatterAttorney } = require('../models');
 const { Op, Sequelize } = require('sequelize');
 const { getActiveHierarchyTree, getDescendantRoles, getAssignableRolesForUser } = require('../utils/roleHierarchy');
+const useFirestore = process.env.FIRESTORE_ENABLED === 'true';
+const fsMatters = useFirestore ? require('../services/firestore/matters') : null;
 
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -253,6 +255,28 @@ router.post('/', isAuthenticated, async (req, res) => {
       created_by: req.user.id
     });
 
+    if (useFirestore && matter) {
+      await fsMatters.create({
+        id: matter.id,
+        matter_number,
+        matter_name,
+        client_id: client_id ? String(client_id) : null,
+        responsible_attorney_id: leadAttorneyId ? String(leadAttorneyId) : null,
+        responsible_attorney_ids: uniqueAttorneyIds.map(String),
+        visible_to: Array.from(new Set([req.user.id, leadAttorneyId, ...uniqueAttorneyIds].map(String).filter(Boolean))),
+        case_area,
+        case_type,
+        dispute_resolution,
+        status,
+        start_date: start_date || null,
+        end_date: end_date || null,
+        max_budget: max_budget || null,
+        payment_method,
+        description,
+        created_by: req.user.id ? String(req.user.id) : null
+      });
+    }
+
     if (matter && uniqueAttorneyIds.length) {
       const payload = uniqueAttorneyIds.map(userId => ({ matter_id: matter.id, user_id: userId }));
       await MatterAttorney.bulkCreate(payload, { ignoreDuplicates: true });
@@ -324,10 +348,34 @@ router.put('/:id', isAuthenticated, async (req, res) => {
       description
     });
 
+    if (useFirestore) {
+      await fsMatters.update(matter.id, {
+        matter_number,
+        matter_name,
+        client_id: client_id ? String(client_id) : null,
+        responsible_attorney_id: leadAttorneyId ? String(leadAttorneyId) : null,
+        responsible_attorney_ids: uniqueAttorneyIds.map(String),
+        visible_to: Array.from(new Set([req.user.id, leadAttorneyId, ...uniqueAttorneyIds].map(String).filter(Boolean))),
+        case_area,
+        case_type,
+        dispute_resolution,
+        status,
+        start_date: start_date || null,
+        end_date: end_date || null,
+        max_budget: max_budget || null,
+        payment_method,
+        description
+      });
+    }
+
     await MatterAttorney.destroy({ where: { matter_id: matter.id } });
     const payload = uniqueAttorneyIds.map(userIdItem => ({ matter_id: matter.id, user_id: userIdItem }));
     if (payload.length) {
       await MatterAttorney.bulkCreate(payload, { ignoreDuplicates: true });
+    }
+
+    if (useFirestore) {
+      await fsMatters.setAttorneys(matter.id, uniqueAttorneyIds);
     }
 
     req.flash('success', 'Matter updated successfully');
@@ -642,6 +690,10 @@ router.post('/:id/documents', isAuthenticated, handleUpload, async (req, res) =>
 // Delete matter
 router.delete('/:id', isAuthenticated, async (req, res) => {
   try {
+    if (useFirestore) {
+      await fsMatters.update(req.params.id, { deleted: true });
+    }
+
     const matter = await Matter.findByPk(req.params.id);
     
     if (!matter) {

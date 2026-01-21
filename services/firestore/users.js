@@ -61,6 +61,15 @@ const findById = async (id) => {
   return { id: doc.id, ...doc.data() };
 };
 
+const listActive = async (filters = {}) => {
+  let query = getCollection().where('is_active', '!=', false);
+  if (filters.accountTypes && Array.isArray(filters.accountTypes) && filters.accountTypes.length) {
+    query = query.where('account_type', 'in', filters.accountTypes);
+  }
+  const snap = await query.get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
 const createFromSequelize = async (user) => {
   const data = mapSequelizeUser(user);
   if (!data) return null;
@@ -93,5 +102,6 @@ module.exports = {
   updateLastLogin,
   validatePassword,
   upsert,
-  mapSequelizeUser
+  mapSequelizeUser,
+  listActive
 };

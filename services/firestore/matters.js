@@ -46,9 +46,10 @@ const findAllForUser = async ({ userId, isAdmin, search, status, dispute }) => {
 
 const create = async (data) => {
   const col = getCollection();
-  const docRef = col.doc();
+  const docRef = data?.id ? col.doc(String(data.id)) : col.doc();
   const payload = {
     ...data,
+    id: data?.id ? String(data.id) : docRef.id,
     created_at: FieldValue.serverTimestamp(),
     updated_at: FieldValue.serverTimestamp()
   };
