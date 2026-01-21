@@ -3,11 +3,24 @@ const router = express.Router();
 const { isAuthenticated } = require('../middleware/auth');
 const { Contact, ContactEmail, ContactPhone, ContactAddress } = require('../models');
 const { Op } = require('sequelize');
+const useFirestore = process.env.FIRESTORE_ENABLED === 'true';
+const fsContacts = useFirestore ? require('../services/firestore/contacts') : null;
 
 // List contacts
 router.get('/', isAuthenticated, async (req, res) => {
   try {
     const { search, filter } = req.query;
+    if (useFirestore) {
+      const contacts = await fsContacts.list({ search, filter });
+      res.render('contacts/index', {
+        title: 'Contacts',
+        contacts,
+        search: search || '',
+        filter: filter || 'all'
+      });
+      return;
+    }
+
     const where = {};
 
     if (search) {
@@ -110,6 +123,20 @@ router.post('/', isAuthenticated, async (req, res) => {
       }
     }
 
+    if (useFirestore) {
+      await fsContacts.create({
+        id: contact.id,
+        entity_type,
+        name,
+        is_client: is_client === 'true',
+        notes,
+        created_by: req.user.id ? String(req.user.id) : null,
+        emails,
+        phones,
+        addresses
+      });
+    }
+
     req.flash('success', 'Contact created successfully');
     res.redirect('/contacts');
   } catch (error) {
@@ -122,13 +149,18 @@ router.post('/', isAuthenticated, async (req, res) => {
 // Edit contact page
 router.get('/:id/edit', isAuthenticated, async (req, res) => {
   try {
-    const contact = await Contact.findByPk(req.params.id, {
-      include: [
-        { model: ContactEmail, as: 'emails' },
-        { model: ContactPhone, as: 'phones' },
-        { model: ContactAddress, as: 'addresses' }
-      ]
-    });
+    let contact;
+    if (useFirestore) {
+      contact = await fsContacts.findById(req.params.id);
+    } else {
+      contact = await Contact.findByPk(req.params.id, {
+        include: [
+          { model: ContactEmail, as: 'emails' },
+          { model: ContactPhone, as: 'phones' },
+          { model: ContactAddress, as: 'addresses' }
+        ]
+      });
+    }
 
     if (!contact) {
       req.flash('error', 'Contact not found');
@@ -150,6 +182,10 @@ router.get('/:id/edit', isAuthenticated, async (req, res) => {
 // Delete contact
 router.delete('/:id', isAuthenticated, async (req, res) => {
   try {
+    if (useFirestore) {
+      await fsContacts.remove(req.params.id);
+    }
+
     const contact = await Contact.findByPk(req.params.id);
     
     if (!contact) {

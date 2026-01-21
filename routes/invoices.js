@@ -5,6 +5,10 @@ const { Invoice, InvoiceBill, Contact, Matter, CostJournal, PaymentProof, User }
 const { Op, Sequelize } = require('sequelize');
 const moment = require('moment');
 const { sendNotification, notifications } = require('../utils/whatsappNotifier');
+const useFirestore = process.env.FIRESTORE_ENABLED === 'true';
+const fsMatters = useFirestore ? require('../services/firestore/matters') : null;
+const fsInvoices = useFirestore ? require('../services/firestore/invoices') : null;
+const fsContacts = useFirestore ? require('../services/firestore/contacts') : null;
 
 // List invoices
 router.get('/', isAuthenticated, async (req, res) => {
@@ -12,6 +16,20 @@ router.get('/', isAuthenticated, async (req, res) => {
     const { search, status } = req.query;
     const isAdmin = req.user?.account_type === 'admin';
     const userId = Number(req.user.id) || 0;
+
+    if (useFirestore) {
+      const accessibleMatters = isAdmin ? [] : await fsMatters.findAllForUser({ userId, isAdmin, search: '', status: 'all', dispute: 'all' });
+      const matterIds = accessibleMatters.map((m) => m.id);
+      const invoices = await fsInvoices.listForUser({ userId, isAdmin, accessibleMatterIds: matterIds, search, status });
+      res.render('invoices/index', {
+        title: 'Invoices',
+        invoices,
+        search: search || '',
+        status: status || 'all',
+        moment
+      });
+      return;
+    }
 
     const baseWhere = {};
 
@@ -77,18 +95,23 @@ router.get('/', isAuthenticated, async (req, res) => {
 // Create invoice page
 router.get('/create', isAuthenticated, async (req, res) => {
   try {
-    const contacts = await Contact.findAll({ where: { is_client: true } });
     const isAdmin = req.user?.account_type === 'admin';
     const userId = Number(req.user.id) || 0;
-    const matters = await Matter.findAll({
-      where: isAdmin ? {} : {
-        [Op.or]: [
-          { created_by: userId },
-          { responsible_attorney_id: userId },
-          Sequelize.literal(`EXISTS (SELECT 1 FROM matter_attorneys ma WHERE ma.matter_id = Matter.id AND ma.user_id = ${userId})`)
-        ]
-      }
-    });
+    const contacts = useFirestore
+      ? await fsContacts.list({ filter: 'client' })
+      : await Contact.findAll({ where: { is_client: true } });
+
+    const matters = useFirestore
+      ? await fsMatters.findAllForUser({ userId, isAdmin, search: '', status: 'all', dispute: 'all' })
+      : await Matter.findAll({
+          where: isAdmin ? {} : {
+            [Op.or]: [
+              { created_by: userId },
+              { responsible_attorney_id: userId },
+              Sequelize.literal(`EXISTS (SELECT 1 FROM matter_attorneys ma WHERE ma.matter_id = Matter.id AND ma.user_id = ${userId})`)
+            ]
+          }
+        });
 
     // Get unbilled cost journals
     const unbilledJournals = await CostJournal.findAll({
@@ -217,6 +240,32 @@ router.post('/', isAuthenticated, async (req, res) => {
       }
     }
 
+    if (useFirestore) {
+      const matter = matter_id ? await Matter.findByPk(matter_id) : null;
+      await fsInvoices.create({
+        id: invoice.id,
+        invoice_number,
+        contact_id: contact_id ? String(contact_id) : null,
+        matter_id: matter_id ? String(matter_id) : null,
+        issue_date,
+        due_date,
+        subtotal,
+        tax_rate: tax_rate || 0,
+        tax_amount: taxAmount,
+        discount_amount: discount_amount || 0,
+        total_amount: totalAmount,
+        status: 'draft',
+        notes,
+        bills: billsArray,
+        created_by: req.user.id ? String(req.user.id) : null,
+        matter_created_by: matter?.created_by ? String(matter.created_by) : null,
+        matter_responsible_attorney: matter?.responsible_attorney_id ? String(matter.responsible_attorney_id) : null,
+        visible_to: matter
+          ? Array.from(new Set([req.user.id, matter.created_by, matter.responsible_attorney_id].filter(Boolean).map(String)))
+          : [String(req.user.id)]
+      });
+    }
+
     res.redirect('/invoices');
   } catch (error) {
     console.error(error);
@@ -231,13 +280,18 @@ router.get('/:id', isAuthenticated, async (req, res) => {
     const isAdmin = req.user?.account_type === 'admin';
     const userId = Number(req.user.id) || 0;
 
-    const invoice = await Invoice.findByPk(req.params.id, {
-      include: [
-        { model: Contact, as: 'contact' },
-        { model: Matter, as: 'matter' },
-        { model: InvoiceBill, as: 'bills' }
-      ]
-    });
+    let invoice;
+    if (useFirestore) {
+      invoice = await fsInvoices.findById(req.params.id);
+    } else {
+      invoice = await Invoice.findByPk(req.params.id, {
+        include: [
+          { model: Contact, as: 'contact' },
+          { model: Matter, as: 'matter' },
+          { model: InvoiceBill, as: 'bills' }
+        ]
+      });
+    }
 
     if (!invoice) {
       req.flash('error', 'Invoice not found');
@@ -246,24 +300,40 @@ router.get('/:id', isAuthenticated, async (req, res) => {
 
     if (!isAdmin) {
       const matterId = invoice.matter_id;
-      let allowed = invoice.created_by === userId;
+      let allowed = invoice.created_by === userId || invoice.created_by === String(userId);
       if (!allowed && matterId) {
-        const permittedMatter = await Matter.findOne({
-          where: {
-            id: matterId,
-            [Op.or]: [
-              { created_by: userId },
-              { responsible_attorney_id: userId },
-              Sequelize.literal(`EXISTS (SELECT 1 FROM matter_attorneys ma WHERE ma.matter_id = Matter.id AND ma.user_id = ${userId})`)
-            ]
-          }
-        });
-        allowed = !!permittedMatter;
+        if (useFirestore) {
+          const matters = await fsMatters.findAllForUser({ userId, isAdmin: false, search: '', status: 'all', dispute: 'all' });
+          const set = new Set((matters || []).map((m) => m.id));
+          allowed = set.has(String(matterId));
+        } else {
+          const permittedMatter = await Matter.findOne({
+            where: {
+              id: matterId,
+              [Op.or]: [
+                { created_by: userId },
+                { responsible_attorney_id: userId },
+                Sequelize.literal(`EXISTS (SELECT 1 FROM matter_attorneys ma WHERE ma.matter_id = Matter.id AND ma.user_id = ${userId})`)
+              ]
+            }
+          });
+          allowed = !!permittedMatter;
+        }
       }
 
       if (!allowed) {
         req.flash('error', 'You are not allowed to view this invoice');
         return res.redirect('/invoices');
+      }
+    }
+
+    // Attach contact/matter for Firestore mode (best-effort)
+    if (useFirestore) {
+      if (invoice.contact_id) {
+        invoice.contact = await fsContacts.findById(invoice.contact_id) || null;
+      }
+      if (invoice.matter_id) {
+        invoice.matter = await fsMatters.findById(invoice.matter_id) || null;
       }
     }
 
@@ -282,13 +352,20 @@ router.get('/:id', isAuthenticated, async (req, res) => {
 // Update invoice status
 router.patch('/:id/status', isAuthenticated, async (req, res) => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id);
+    const invoice = useFirestore ? await fsInvoices.findById(req.params.id) : await Invoice.findByPk(req.params.id);
     
-    if (!invoice || invoice.created_by !== req.user.id) {
+    if (!invoice || (invoice.created_by !== req.user.id && invoice.created_by !== String(req.user.id))) {
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
-    await invoice.update({ status: req.body.status });
+    if (useFirestore) {
+      await fsInvoices.updateStatus(req.params.id, req.body.status);
+    }
+
+    const sqlInvoice = await Invoice.findByPk(req.params.id);
+    if (sqlInvoice) {
+      await sqlInvoice.update({ status: req.body.status });
+    }
     res.json({ success: true, message: 'Invoice status updated' });
   } catch (error) {
     console.error(error);
@@ -299,9 +376,10 @@ router.patch('/:id/status', isAuthenticated, async (req, res) => {
 // Delete invoice
 router.delete('/:id', isAuthenticated, async (req, res) => {
   try {
-    const invoice = await Invoice.findByPk(req.params.id);
+    const invoice = useFirestore ? await fsInvoices.findById(req.params.id) : await Invoice.findByPk(req.params.id);
     
-    if (!invoice || invoice.created_by !== req.user.id) {
+    const createdBy = invoice?.created_by;
+    if (!invoice || (createdBy !== req.user.id && createdBy !== String(req.user.id))) {
       return res.status(404).json({ success: false, message: 'Invoice not found' });
     }
 
@@ -309,21 +387,26 @@ router.delete('/:id', isAuthenticated, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Can only delete draft invoices' });
     }
 
-    // Prevent deleting invoices that already have related payments or cost journals
-    const hasPayments = await PaymentProof.count({ where: { invoice_id: invoice.id } });
+    const sqlInvoice = await Invoice.findByPk(req.params.id);
+
+    const hasPayments = sqlInvoice ? await PaymentProof.count({ where: { invoice_id: sqlInvoice.id } }) : 0;
     if (hasPayments > 0) {
       return res.status(400).json({ success: false, message: 'Cannot delete: invoice has payment records' });
     }
 
-    const hasCostJournals = await CostJournal.count({ where: { invoice_id: invoice.id } });
+    const hasCostJournals = sqlInvoice ? await CostJournal.count({ where: { invoice_id: sqlInvoice.id } }) : 0;
     if (hasCostJournals > 0) {
       return res.status(400).json({ success: false, message: 'Cannot delete: invoice linked to cost journals' });
     }
 
-    // Remove invoice bills first to satisfy FK constraints
-    await InvoiceBill.destroy({ where: { invoice_id: invoice.id } });
+    if (sqlInvoice) {
+      await InvoiceBill.destroy({ where: { invoice_id: sqlInvoice.id } });
+      await sqlInvoice.destroy();
+    }
 
-    await invoice.destroy();
+    if (useFirestore) {
+      await fsInvoices.remove(req.params.id);
+    }
     res.json({ success: true, message: 'Invoice deleted successfully' });
   } catch (error) {
     console.error(error);
