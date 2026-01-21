@@ -9,6 +9,8 @@ const { Op, Sequelize } = require('sequelize');
 const { getActiveHierarchyTree, getDescendantRoles, getAssignableRolesForUser } = require('../utils/roleHierarchy');
 const useFirestore = process.env.FIRESTORE_ENABLED === 'true';
 const fsMatters = useFirestore ? require('../services/firestore/matters') : null;
+const fsTasks = useFirestore ? require('../services/firestore/tasks') : null;
+const fsUsers = useFirestore ? require('../services/firestore/users') : null;
 
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -75,10 +77,21 @@ router.get('/', isAuthenticated, async (req, res) => {
     const isAdmin = req.user?.account_type === 'admin';
     const userId = Number(req.user.id) || 0;
 
+    if (useFirestore) {
+      const matters = await fsMatters.findAllForUser({ userId, isAdmin, search, status, dispute });
+      res.render('matters/index', {
+        title: 'Matters',
+        matters,
+        search: search.trim(),
+        status,
+        dispute
+      });
+      return;
+    }
+
     const filters = [];
     const searchTerm = search.trim();
 
-    // Restrict non-admins to their matters
     if (!isAdmin) {
       filters.push({
         [Op.or]: [
@@ -294,7 +307,7 @@ router.post('/', isAuthenticated, async (req, res) => {
 // Update matter
 router.put('/:id', isAuthenticated, async (req, res) => {
   try {
-    const matter = await Matter.findByPk(req.params.id);
+    const matter = useFirestore ? await fsMatters.findById(req.params.id) : await Matter.findByPk(req.params.id);
     if (!matter) {
       req.flash('error', 'Matter not found');
       return res.redirect('/matters');
@@ -390,14 +403,19 @@ router.put('/:id', isAuthenticated, async (req, res) => {
 // View matter detail
 router.get('/:id', isAuthenticated, async (req, res) => {
   try {
-    const matter = await Matter.findByPk(req.params.id, {
-      include: [
-        { model: Contact, as: 'client' },
-        { model: User, as: 'responsibleAttorney' },
-        { model: User, as: 'responsibleAttorneys', through: { attributes: [] } },
-        { model: User, as: 'creator' }
-      ]
-    });
+    let matter;
+    if (useFirestore) {
+      matter = await fsMatters.findById(req.params.id);
+    } else {
+      matter = await Matter.findByPk(req.params.id, {
+        include: [
+          { model: Contact, as: 'client' },
+          { model: User, as: 'responsibleAttorney' },
+          { model: User, as: 'responsibleAttorneys', through: { attributes: [] } },
+          { model: User, as: 'creator' }
+        ]
+      });
+    }
 
     if (!matter) {
       req.flash('error', 'Matter not found');
@@ -410,23 +428,27 @@ router.get('/:id', isAuthenticated, async (req, res) => {
       order: [['created_at', 'ASC']]
     });
 
-    const tasks = await Task.findAll({
-      where: { matter_id: req.params.id },
-      include: [{ model: User, as: 'assignee', attributes: ['id', 'full_name', 'account_type'] }],
-      order: [['created_at', 'DESC']]
-    });
+    const tasks = useFirestore
+      ? await fsTasks.listByMatter(req.params.id)
+      : await Task.findAll({
+          where: { matter_id: req.params.id },
+          include: [{ model: User, as: 'assignee', attributes: ['id', 'full_name', 'account_type'] }],
+          order: [['created_at', 'DESC']]
+        });
 
     const tree = await getActiveHierarchyTree();
     const assignableRoles = getAssignableRolesForUser(tree, req.user.account_type, req.user?.account_type === 'admin');
-    const assignees = await User.findAll({
-      where: {
-        is_active: true,
-        ...(assignableRoles ? { account_type: { [Op.in]: assignableRoles } } : {})
-      },
-      attributes: ['id', 'full_name', 'account_type']
-    });
+    const assignees = useFirestore
+      ? await fsUsers.listActive({ accountTypes: assignableRoles || undefined })
+      : await User.findAll({
+          where: {
+            is_active: true,
+            ...(assignableRoles ? { account_type: { [Op.in]: assignableRoles } } : {})
+          },
+          attributes: ['id', 'full_name', 'account_type']
+        });
 
-    const documents = await Document.findAll({
+    const documents = useFirestore ? [] : await Document.findAll({
       where: { matter_id: req.params.id, is_deleted: false },
       order: [['created_at', 'DESC']]
     });
@@ -627,7 +649,7 @@ router.post('/:id/tasks', isAuthenticated, async (req, res) => {
       }
     }
 
-    await Task.create({
+    const created = await Task.create({
       task_type: 'matter',
       matter_id: req.params.id,
       title,
@@ -639,6 +661,22 @@ router.post('/:id/tasks', isAuthenticated, async (req, res) => {
       assignee_id,
       created_by: req.user.id
     });
+
+    if (useFirestore) {
+      await fsTasks.create({
+        id: created.id,
+        task_type: 'matter',
+        matter_id: String(req.params.id),
+        title,
+        description,
+        status: 'pending',
+        priority,
+        start_date: null,
+        due_date: due_date || null,
+        assignee_id: assignee_id ? String(assignee_id) : null,
+        created_by: req.user.id ? String(req.user.id) : null
+      });
+    }
 
     req.flash('success', 'Task created');
     res.redirect(`/matters/${req.params.id}`);

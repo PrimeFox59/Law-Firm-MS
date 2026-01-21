@@ -47,6 +47,11 @@ const listApprovals = async ({ userId }) => {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 };
 
+const listByMatter = async (matterId) => {
+  const snap = await getCollection().where('matter_id', '==', String(matterId)).get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
 const create = async (data) => {
   const docRef = data?.id ? getCollection().doc(String(data.id)) : getCollection().doc();
   const payload = {
@@ -74,6 +79,7 @@ module.exports = {
   findById,
   listForUser,
   listApprovals,
+  listByMatter,
   create,
   update,
   remove
