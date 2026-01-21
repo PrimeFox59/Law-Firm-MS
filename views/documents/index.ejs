@@ -1,0 +1,282 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <div class="text-muted text-uppercase small fw-semibold">Workspace</div>
+      <h2 class="fw-semibold mb-0"><i class="fas fa-folder-open me-2"></i>Documents</h2>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#folderModal">
+        <i class="fas fa-folder-plus me-2"></i>New Folder
+      </button>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="fas fa-upload me-2"></i>Upload File
+      </button>
+    </div>
+  </div>
+
+  <% const totalDocs = documents.length; %>
+  <% const fileCount = documents.filter(d => d.type === 'file').length; %>
+  <% const folderCount = documents.filter(d => d.type === 'folder').length; %>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="p-3 rounded-3 border bg-white shadow-sm d-flex align-items-center justify-content-between">
+        <div>
+          <div class="text-muted small">Total Items</div>
+          <div class="fs-5 fw-bold"><%= totalDocs %></div>
+        </div>
+        <span class="badge bg-primary-subtle text-primary">All</span>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="p-3 rounded-3 border bg-white shadow-sm d-flex align-items-center justify-content-between">
+        <div>
+          <div class="text-muted small">Files</div>
+          <div class="fs-5 fw-bold"><%= fileCount %></div>
+        </div>
+        <span class="badge bg-info-subtle text-info">Files</span>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="p-3 rounded-3 border bg-white shadow-sm d-flex align-items-center justify-content-between">
+        <div>
+          <div class="text-muted small">Folders</div>
+          <div class="fs-5 fw-bold"><%= folderCount %></div>
+        </div>
+        <span class="badge bg-secondary-subtle text-secondary">Folders</span>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="p-3 rounded-3 border bg-white shadow-sm d-flex align-items-center justify-content-between">
+        <div>
+          <div class="text-muted small">Last Updated</div>
+          <div class="fs-6 fw-semibold"><%= documents[0] && documents[0].created_at ? new Date(documents[0].created_at).toLocaleString() : '—' %></div>
+        </div>
+        <i class="fas fa-clock text-muted"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <% if (currentFolder) { %>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/documents">Root</a></li>
+        <li class="breadcrumb-item active"><%= currentFolder.name %></li>
+      </ol>
+    </nav>
+  <% } %>
+
+  <!-- Documents Table -->
+  <div class="card">
+    <div class="card-body">
+      <% if (documents.length > 0) { %>
+        <div class="table-responsive">
+          <table class="table align-middle table-hover">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 200px;">Actions</th>
+                <th>Item</th>
+                <th>Links</th>
+                <th>Matter</th>
+                <th>Task</th>
+                <th>Uploaded By</th>
+                <th>Revision</th>
+                <th>Uploaded</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% documents.forEach(doc => { const filePath = (doc.file_path || '').replace(/\\/g, '/'); %>
+                <tr>
+                  <td>
+                    <div class="d-flex gap-2 flex-wrap">
+                      <% if (doc.type === 'folder') { %>
+                        <a href="/documents?parent_id=<%= doc.id %>" class="btn btn-sm btn-light border" title="Open">
+                          <i class="fas fa-folder-open"></i>
+                        </a>
+                      <% } else { %>
+                        <a href="/<%= filePath %>" class="btn btn-sm btn-light border" download title="Download">
+                          <i class="fas fa-download"></i>
+                        </a>
+                      <% } %>
+                      <% if (doc.type === 'file') { %>
+                        <button class="btn btn-sm btn-light border" data-bs-toggle="modal" data-bs-target="#reuploadModal" data-doc-id="<%= doc.id %>" data-doc-name="<%= doc.name %>" title="Reupload">
+                          <i class="fas fa-upload"></i>
+                        </button>
+                      <% } %>
+                      <button onclick="deleteDocument(<%= doc.id %>)" class="btn btn-sm btn-light border text-danger" title="Delete">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge rounded-pill <%= doc.type === 'folder' ? 'bg-secondary-subtle text-secondary' : 'bg-info-subtle text-info' %>">
+                        <i class="fas <%= doc.type === 'folder' ? 'fa-folder' : 'fa-file' %> me-1"></i><%= doc.type %>
+                      </span>
+                      <div>
+                        <div class="fw-semibold"><%= doc.name %></div>
+                        <div class="text-muted small">ID: <%= doc.id %></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <% if (doc.hyperlink) { %>
+                      <a href="<%= doc.hyperlink %>" target="_blank" rel="noopener" class="badge bg-light text-primary">Hyperlink</a>
+                    <% } %>
+                    <% if (doc.type === 'file') { %>
+                      <a href="/<%= doc.file_path %>" target="_blank" rel="noopener" class="badge bg-light text-success ms-1">File</a>
+                    <% } %>
+                    <% if (!doc.hyperlink && doc.type !== 'file') { %>
+                      <span class="text-muted small">-</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (doc.matter) { %>
+                      <a href="/matters/<%= doc.matter.id %>" class="badge bg-primary-subtle text-primary">
+                        <%= doc.matter.matter_number || doc.matter.matter_name || doc.matter.id %>
+                      </a>
+                    <% } else { %>
+                      <span class="text-muted">-</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (doc.task) { %>
+                      <a href="/tasks/<%= doc.task.id %>" class="badge bg-warning-subtle text-warning">
+                        <%= doc.task.title || ('Task ' + doc.task.id) %>
+                      </a>
+                    <% } else { %>
+                      <span class="text-muted">-</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center" style="width:28px;height:28px; font-size:12px;">
+                        <%= doc.creator && doc.creator.full_name ? doc.creator.full_name.charAt(0).toUpperCase() : 'U' %>
+                      </div>
+                      <div class="small fw-semibold"><%= doc.creator ? doc.creator.full_name : '-' %></div>
+                    </div>
+                  </td>
+                  <td><span class="badge bg-light text-dark">v<%= doc.revision_number != null ? doc.revision_number : 0 %></span></td>
+                  <td><span class="text-muted small"><%= doc.created_at ? new Date(doc.created_at).toLocaleString() : '-' %></span></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <div class="text-center text-muted py-4">
+          <i class="fas fa-folder-open fa-2x mb-2"></i>
+          <div>No documents found</div>
+          <div class="mt-2">
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadModal">Upload File</button>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<!-- New Folder Modal -->
+<div class="modal fade" id="folderModal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create New Folder</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="/documents/folder">
+        <div class="modal-body">
+          <input type="hidden" name="parent_id" value="<%= currentFolder ? currentFolder.id : '' %>">
+          <div class="mb-3">
+            <label class="form-label">Folder Name</label>
+            <input type="text" class="form-control" name="name" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Reupload Modal -->
+<div class="modal fade" id="reuploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reupload Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="reuploadForm" method="POST" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Select file</label>
+            <input type="file" name="file" class="form-control" required>
+          </div>
+          <p class="text-muted" style="font-size:13px;">Reupload increases revision number (starting at 0).</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Upload File Modal -->
+<div class="modal fade" id="uploadModal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload File</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="/documents/upload" enctype="multipart/form-data">
+        <div class="modal-body">
+          <input type="hidden" name="parent_id" value="<%= currentFolder ? currentFolder.id : '' %>">
+          <div class="mb-3">
+            <label class="form-label">Select File</label>
+            <input type="file" class="form-control" name="file" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function deleteDocument(id) {
+  if (confirm('Move to trash?')) {
+    fetch(`/documents/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) location.reload();
+    });
+  }
+}
+
+// Wire reupload modal
+const reuploadModal = document.getElementById('reuploadModal');
+if (reuploadModal) {
+  reuploadModal.addEventListener('show.bs.modal', (event) => {
+    const button = event.relatedTarget;
+    const docId = button.getAttribute('data-doc-id');
+    const form = document.getElementById('reuploadForm');
+    form.setAttribute('action', `/documents/${docId}/reupload`);
+  });
+}
+</script>
+
+<%- include('../partials/footer') %>

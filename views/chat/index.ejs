@@ -1,0 +1,737 @@
+<%- include('../partials/header') %>
+
+<style>
+  .chat-shell { height: calc(100vh - 90px); min-height: calc(100vh - 90px); }
+  .chat-shell .row { height: 100%; }
+  .dm-list, .matter-list { height: calc(100% - 90px); overflow-y: auto; }
+  .chat-messages { flex: 1; min-height: 0; overflow-y: auto; }
+  @media (max-width: 991.98px) {
+    #chatSidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 86%;
+      max-width: 360px;
+      background: #fff;
+      z-index: 1040;
+      transform: translateX(-100%);
+      transition: transform 180ms ease;
+      box-shadow: 0 10px 36px rgba(0,0,0,0.18);
+    }
+    #chatSidebar.show { transform: translateX(0); }
+    #chatSidebarBackdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 1035;
+      display: none;
+    }
+    #chatSidebarBackdrop.show { display: block; }
+    .chat-main { min-height: 100dvh; }
+    #dmMessageList { max-height: calc(100dvh - 250px) !important; }
+  }
+</style>
+
+<div class="container-fluid py-3 chat-shell">
+  <div id="chatSidebarBackdrop"></div>
+  <div class="row g-3 h-100">
+    <div class="col-lg-3 h-100" id="chatSidebar">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-3">
+            <h5 class="mb-0">Messages</h5>
+            <div class="ms-auto btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-primary" data-mode-tab="dm">Direct</button>
+              <button type="button" class="btn btn-outline-secondary" data-mode-tab="matter">Matters</button>
+            </div>
+          </div>
+          <form class="mb-3" id="listSearchForm" autocomplete="off">
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control" id="listSearchInput" value="<%= q || '' %>" placeholder="Search users...">
+              <button class="btn btn-outline-secondary" type="button" id="listSearchBtn"><i class="fas fa-search"></i></button>
+            </div>
+          </form>
+
+          <div id="dmUserList" class="list-group small dm-list">
+            <% if (peers && peers.length) { %>
+              <% peers.forEach(p => { const unread = (unreadMap && unreadMap[p.id]) || 0; %>
+                <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center dm-user-item <%= peerId === p.id ? 'active' : '' %>" data-peer-id="<%= p.id %>">
+                  <span>
+                    <span class="fw-semibold"><%= p.full_name %></span>
+                    <small class="text-muted d-block"><%= p.account_type %></small>
+                  </span>
+                  <span class="badge bg-danger-subtle text-danger <%= unread ? '' : 'd-none' %>" data-unread="<%= p.id %>"><%= unread %></span>
+                </button>
+              <% }) %>
+            <% } else { %>
+              <div class="text-muted">No users found.</div>
+            <% } %>
+          </div>
+
+          <div id="matterListContainer" class="list-group small d-none matter-list">
+            <% if (matters && matters.length) { %>
+              <% matters.forEach(m => { %>
+                <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center matter-item" data-matter-id="<%= m.id %>">
+                  <span>
+                    <span class="fw-semibold"><%= m.matter_name %></span>
+                    <small class="text-muted d-block">#<%= m.matter_number %> • <%= m.client ? m.client.name : 'No client' %></small>
+                  </span>
+                  <span class="badge bg-danger-subtle text-danger d-none" data-matter-unread="<%= m.id %>">New</span>
+                </button>
+              <% }) %>
+            <% } else { %>
+              <div class="text-muted">No matters found.</div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-9 h-100 chat-main">
+      <div class="card h-100 d-flex flex-column shadow-sm">
+        <div class="card-header d-flex align-items-center justify-content-between gap-2" style="position: sticky; top: 0; z-index: 10; background: #fff;">
+          <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-secondary btn-sm d-lg-none" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+            <div>
+              <div class="text-muted small" id="chatContextLabel">Chatting with</div>
+              <div class="fw-semibold" id="dmPeerName">Select a user</div>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control form-control-sm" id="dmSearch" placeholder="Search in chat" style="width: 180px;">
+            <button class="btn btn-sm btn-outline-primary" id="dmSearchBtn"><i class="fas fa-search"></i></button>
+          </div>
+        </div>
+        <div class="card-body flex-grow-1 chat-messages" id="dmMessageList" style="background: #f8fafc;"></div>
+        <div class="px-3 pb-2 border-top">
+          <button class="btn btn-sm btn-outline-secondary w-100" id="dmLoadMore">Load older</button>
+        </div>
+        <div class="card-footer bg-white border-top">
+          <form id="dmForm" class="d-flex gap-2 align-items-center" enctype="multipart/form-data">
+            <input type="hidden" name="peer_id" id="dmPeerInput" value="<%= peerId || '' %>">
+            <input type="file" class="d-none" id="dmAttachment" name="attachment">
+            <input type="file" class="d-none" id="matterAttachment" name="image" accept="image/*">
+            <button class="btn btn-outline-secondary" type="button" id="dmAttachBtn" title="Attach file/image"><i class="fas fa-paperclip"></i></button>
+            <div class="flex-grow-1">
+              <input type="text" class="form-control" name="message" id="dmMessageInput" placeholder="Type a message..." autocomplete="off">
+              <div class="small text-muted mt-1" id="dmAttachmentLabel">No attachment</div>
+            </div>
+            <button class="btn btn-primary" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const CURRENT_USER_ID = <%= user ? user.id : 'null' %>;
+  let activePeerId = <%= peerId || 'null' %>;
+  let activeMatterId = null;
+  let chatMode = 'dm';
+  const dmUserList = document.getElementById('dmUserList');
+  const matterListContainer = document.getElementById('matterListContainer');
+  const matterList = document.querySelectorAll('.matter-item');
+  const modeTabs = document.querySelectorAll('[data-mode-tab]');
+  const listSearchInput = document.getElementById('listSearchInput');
+  const listSearchBtn = document.getElementById('listSearchBtn');
+  const dmMessageList = document.getElementById('dmMessageList');
+  const dmPeerName = document.getElementById('dmPeerName');
+  const dmPeerInput = document.getElementById('dmPeerInput');
+  const dmLoadMore = document.getElementById('dmLoadMore');
+  const dmForm = document.getElementById('dmForm');
+  const dmMessageInput = document.getElementById('dmMessageInput');
+  const dmSearchInput = document.getElementById('dmSearch');
+  const dmSearchBtn = document.getElementById('dmSearchBtn');
+  const dmSendBtn = dmForm ? dmForm.querySelector('button[type="submit"]') : null;
+  const dmAttachBtn = document.getElementById('dmAttachBtn');
+  const dmAttachmentInput = document.getElementById('dmAttachment');
+  const matterAttachmentInput = document.getElementById('matterAttachment');
+  const dmAttachmentLabel = document.getElementById('dmAttachmentLabel');
+  const chatContextLabel = document.getElementById('chatContextLabel');
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const chatSidebar = document.getElementById('chatSidebar');
+  const sidebarBackdrop = document.getElementById('chatSidebarBackdrop');
+  const dmState = { page: 1, pageSize: 20, hasMore: true, search: '' };
+  const matterState = { page: 1, pageSize: 20, hasMore: true, search: '' };
+  const dmSeenIds = new Set();
+  const matterSeenIds = new Set();
+  let dmUnread = <%- JSON.stringify(unreadMap || {}) %>;
+  let matterUnread = {};
+
+  const escapeHtml = (str = '') => str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const updateUnreadBadge = (peerId) => {
+    const badge = document.querySelector(`[data-unread="${peerId}"]`);
+    if (!badge) return;
+    const count = dmUnread[peerId] || 0;
+    badge.textContent = count || '';
+    badge.classList.toggle('d-none', !count);
+  };
+
+  const bumpPeerToTop = (peerId) => {
+    if (!dmUserList || !peerId) return;
+    const btn = dmUserList.querySelector(`.dm-user-item[data-peer-id="${peerId}"]`);
+    if (btn) {
+      dmUserList.prepend(btn);
+    }
+  };
+
+  const updateMatterBadge = (matterId) => {
+    const badge = document.querySelector(`[data-matter-unread="${matterId}"]`);
+    if (!badge) return;
+    const count = matterUnread[matterId] || 0;
+    badge.textContent = count || '';
+    badge.classList.toggle('d-none', !count);
+  };
+
+  const markRead = async (peerId) => {
+    if (!peerId) return;
+    try {
+      await fetch('/chat/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ peer_id: peerId })
+      });
+      dmUnread[peerId] = 0;
+      updateUnreadBadge(peerId);
+    } catch (err) {
+      console.error('Failed to mark read', err);
+    }
+  };
+
+  const clearMatterUnread = (matterId) => {
+    if (!matterId) return;
+    matterUnread[matterId] = 0;
+    updateMatterBadge(matterId);
+  };
+
+  const setActivePeer = (peerId, peerName) => {
+    chatMode = 'dm';
+    updateModeTabs();
+    activePeerId = peerId;
+    activeMatterId = null;
+    dmPeerInput.value = peerId || '';
+    dmPeerName.textContent = peerName || 'Select a user';
+    clearAttachment();
+    dmState.page = 1;
+    dmState.hasMore = true;
+    dmSeenIds.clear();
+    dmMessageList.innerHTML = '<div class="text-center text-muted py-3">Loading...</div>';
+    clearUnread(peerId);
+    updateUnreadBadge(peerId);
+    updateLoadMore();
+    if (dmSendBtn) dmSendBtn.disabled = !peerId;
+    if (peerId) fetchMessages();
+  };
+
+  const setActiveMatter = (matterId, matterName) => {
+    chatMode = 'matter';
+    updateModeTabs();
+    activeMatterId = matterId;
+    activePeerId = null;
+    dmPeerInput.value = '';
+    dmPeerName.textContent = matterName || 'Select a matter';
+    matterState.search = '';
+    if (dmSearchInput) dmSearchInput.value = '';
+    matterState.page = 1;
+    matterState.hasMore = true;
+    matterSeenIds.clear();
+    dmMessageList.innerHTML = '<div class="text-center text-muted py-3">Loading...</div>';
+    clearMatterUnread(matterId);
+    clearAttachment();
+    updateLoadMore();
+    if (dmSendBtn) dmSendBtn.disabled = !matterId;
+    if (matterId) {
+      fetchMatterMessages();
+      socket.emit('join_matter', matterId);
+    }
+  };
+
+  const renderDmMessage = (msg, opts = { prepend: false }) => {
+    if (!dmMessageList || !msg) return;
+    if (msg.id && dmSeenIds.has(msg.id)) return;
+    if (msg.id) dmSeenIds.add(msg.id);
+    const isMe = CURRENT_USER_ID && msg.sender && Number(msg.sender.id) === Number(CURRENT_USER_ID);
+    const row = document.createElement('div');
+    row.className = `p-2 mb-2 rounded-3 ${isMe ? 'bg-primary text-white ms-auto' : 'bg-white border'} `;
+    row.style.maxWidth = '75%';
+    row.style.wordBreak = 'break-word';
+    const isImage = msg.attachment_type && msg.attachment_type.startsWith('image/');
+    const attachmentHtml = msg.attachment_path ? `
+      <div class="mt-1">
+        ${isImage ? `<a href="/${msg.attachment_path}" target="_blank"><img src="/${msg.attachment_path}" alt="Attachment" style="max-width:200px; border-radius:8px; border:1px solid rgba(0,0,0,0.1);"></a>`
+        : `<a href="/${msg.attachment_path}" target="_blank" class="text-decoration-underline">${escapeHtml(msg.attachment_name || 'Attachment')}</a>`}
+      </div>` : '';
+    row.innerHTML = `
+      <div class="small fw-semibold mb-1">${escapeHtml(msg.sender?.full_name || 'User')}</div>
+      <div class="mb-1">${escapeHtml(msg.message || '')}</div>
+      ${attachmentHtml}
+      <div class="small opacity-75 mt-1">${new Date(msg.created_at || Date.now()).toLocaleString()}</div>
+    `;
+    if (opts.prepend && dmMessageList.firstChild) {
+      dmMessageList.insertBefore(row, dmMessageList.firstChild);
+    } else {
+      dmMessageList.appendChild(row);
+      dmMessageList.scrollTop = dmMessageList.scrollHeight;
+    }
+  };
+
+  const renderDmMessages = (messages, { appendOlder = false } = {}) => {
+    if (!appendOlder) {
+      dmMessageList.innerHTML = '';
+      dmSeenIds.clear();
+    }
+    (messages || []).forEach(m => renderDmMessage(m, { prepend: appendOlder }));
+    const noMore = document.getElementById('dmNoMore');
+    if (noMore) {
+      const hasMessages = dmSeenIds.size > 0;
+      noMore.classList.toggle('d-none', hasMessages);
+    }
+  };
+
+  const renderMatterMessage = (msg, opts = { prepend: false }) => {
+    if (!dmMessageList || !msg) return;
+    if (msg.id && matterSeenIds.has(msg.id)) return;
+    if (msg.id) matterSeenIds.add(msg.id);
+    const isMe = CURRENT_USER_ID && msg.user && Number(msg.user.id) === Number(CURRENT_USER_ID);
+    const row = document.createElement('div');
+    row.className = `p-2 mb-2 rounded-3 ${isMe ? 'bg-primary text-white ms-auto' : 'bg-white border'} `;
+    row.style.maxWidth = '75%';
+    row.style.wordBreak = 'break-word';
+    const hasImage = Boolean(msg.imagePath);
+    const attachmentHtml = hasImage ? `
+      <div class="mt-1">
+        <a href="${msg.imagePath}" target="_blank"><img src="${msg.imagePath}" alt="Attachment" style="max-width:200px; border-radius:8px; border:1px solid rgba(0,0,0,0.1);"></a>
+      </div>` : '';
+    row.innerHTML = `
+      <div class="small fw-semibold mb-1">${escapeHtml(msg.user?.full_name || 'User')}</div>
+      <div class="mb-1">${escapeHtml(msg.text || msg.message || '')}</div>
+      ${attachmentHtml}
+      <div class="small opacity-75 mt-1">${new Date(msg.created_at || Date.now()).toLocaleString()}</div>
+    `;
+    if (opts.prepend && dmMessageList.firstChild) {
+      dmMessageList.insertBefore(row, dmMessageList.firstChild);
+    } else {
+      dmMessageList.appendChild(row);
+      dmMessageList.scrollTop = dmMessageList.scrollHeight;
+    }
+  };
+
+  const renderMatterMessages = (messages, { appendOlder = false } = {}) => {
+    if (!appendOlder) {
+      dmMessageList.innerHTML = '';
+      matterSeenIds.clear();
+    }
+    (messages || []).forEach(m => renderMatterMessage(m, { prepend: appendOlder }));
+  };
+
+  const updateLoadMore = () => {
+    if (!dmLoadMore) return;
+    const state = chatMode === 'dm' ? dmState : matterState;
+    dmLoadMore.disabled = !state.hasMore;
+    dmLoadMore.textContent = state.hasMore ? 'Load older' : 'No more messages';
+  };
+
+  const fetchMessages = async ({ appendOlder = false, pageOverride = null } = {}) => {
+    if (!activePeerId) return;
+    const page = pageOverride || (appendOlder ? dmState.page + 1 : 1);
+    const params = new URLSearchParams({ peer_id: activePeerId, page, pageSize: dmState.pageSize });
+    if (dmState.search) params.append('search', dmState.search);
+    try {
+      const res = await fetch(`/chat/messages?${params.toString()}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Failed to load messages');
+      if (appendOlder) {
+        renderDmMessages(data.messages, { appendOlder: true });
+      } else {
+        renderDmMessages(data.messages, { appendOlder: false });
+      }
+      dmState.page = page;
+      dmState.hasMore = data.pagination?.hasMore;
+      updateLoadMore();
+      dmMessageList.scrollTop = dmMessageList.scrollHeight;
+      await markRead(activePeerId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchMatterMessages = async ({ appendOlder = false, pageOverride = null } = {}) => {
+    if (!activeMatterId) return;
+    const page = pageOverride || (appendOlder ? matterState.page + 1 : 1);
+    const params = new URLSearchParams({ page, pageSize: matterState.pageSize });
+    if (matterState.search) params.append('search', matterState.search);
+    try {
+      const res = await fetch(`/matters/${activeMatterId}/discuss/list?${params.toString()}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Failed to load messages');
+      if (appendOlder) {
+        renderMatterMessages(data.messages, { appendOlder: true });
+      } else {
+        renderMatterMessages(data.messages, { appendOlder: false });
+      }
+      matterState.page = page;
+      matterState.hasMore = data.pagination?.hasMore;
+      updateLoadMore();
+      dmMessageList.scrollTop = dmMessageList.scrollHeight;
+      clearMatterUnread(activeMatterId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const markActiveButton = (peerId) => {
+    document.querySelectorAll('.dm-user-item').forEach(btn => {
+      const id = Number(btn.dataset.peerId);
+      btn.classList.toggle('active', id === peerId);
+    });
+  };
+
+  const clearUnread = (peerId) => {
+    const badge = document.querySelector(`[data-unread="${peerId}"]`);
+    if (badge) badge.classList.add('d-none');
+    if (peerId) dmUnread[peerId] = 0;
+  };
+
+  if (dmUserList) {
+    dmUserList.addEventListener('click', (e) => {
+      const btn = e.target.closest('.dm-user-item');
+      if (!btn) return;
+      const peerId = Number(btn.dataset.peerId);
+      const peerName = btn.querySelector('.fw-semibold')?.textContent || 'User';
+      markActiveButton(peerId);
+      setActivePeer(peerId, peerName);
+      closeSidebar();
+    });
+  }
+
+  if (matterListContainer) {
+    matterListContainer.addEventListener('click', (e) => {
+      const btn = e.target.closest('.matter-item');
+      if (!btn) return;
+      const matterId = Number(btn.dataset.matterId);
+      const matterName = btn.querySelector('.fw-semibold')?.textContent || 'Matter';
+      document.querySelectorAll('.matter-item').forEach(b => b.classList.toggle('active', Number(b.dataset.matterId) === matterId));
+      setActiveMatter(matterId, matterName);
+      closeSidebar();
+    });
+  }
+
+  if (listSearchBtn) {
+    const handleListSearch = () => {
+      const term = (listSearchInput?.value || '').trim();
+      if (chatMode === 'dm') {
+        const params = new URLSearchParams(window.location.search);
+        params.set('q', term);
+        window.location.href = `/chat?${params.toString()}`;
+      } else {
+        filterMatterList();
+      }
+    };
+    listSearchBtn.addEventListener('click', (e) => { e.preventDefault(); handleListSearch(); });
+    if (listSearchInput) {
+      listSearchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleListSearch(); } });
+    }
+  }
+
+  if (dmLoadMore) {
+    dmLoadMore.addEventListener('click', async () => {
+      if (chatMode === 'dm') {
+        if (!dmState.hasMore || !activePeerId) return;
+        await fetchMessages({ appendOlder: true });
+      } else {
+        if (!matterState.hasMore || !activeMatterId) return;
+        await fetchMatterMessages({ appendOlder: true });
+      }
+    });
+  }
+
+  if (dmSearchInput && dmSearchBtn) {
+    const doSearch = async () => {
+      if (chatMode === 'dm') {
+        dmState.search = dmSearchInput.value.trim();
+        dmState.page = 1;
+        await fetchMessages({ appendOlder: false, pageOverride: 1 });
+      } else {
+        matterState.search = dmSearchInput.value.trim();
+        matterState.page = 1;
+        await fetchMatterMessages({ appendOlder: false, pageOverride: 1 });
+      }
+    };
+    dmSearchBtn.addEventListener('click', (e) => { e.preventDefault(); doSearch(); });
+    dmSearchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+  }
+
+  const updateModeTabs = () => {
+    modeTabs.forEach(btn => {
+      const isActive = btn.getAttribute('data-mode-tab') === chatMode;
+      btn.classList.toggle('btn-primary', isActive);
+      btn.classList.toggle('btn-outline-secondary', !isActive);
+    });
+    if (chatMode === 'dm') {
+      if (dmUserList) dmUserList.classList.remove('d-none');
+      if (matterListContainer) matterListContainer.classList.add('d-none');
+      if (listSearchInput) listSearchInput.placeholder = 'Search users...';
+      if (chatContextLabel) chatContextLabel.textContent = 'Chatting with';
+    } else {
+      if (dmUserList) dmUserList.classList.add('d-none');
+      if (matterListContainer) matterListContainer.classList.remove('d-none');
+      if (listSearchInput) listSearchInput.placeholder = 'Search matters...';
+      if (chatContextLabel) chatContextLabel.textContent = 'Matter discussion';
+    }
+  };
+
+  const openSidebar = () => {
+    if (chatSidebar) chatSidebar.classList.add('show');
+    if (sidebarBackdrop) sidebarBackdrop.classList.add('show');
+  };
+
+  const closeSidebar = () => {
+    if (chatSidebar) chatSidebar.classList.remove('show');
+    if (sidebarBackdrop) sidebarBackdrop.classList.remove('show');
+  };
+
+  const switchMode = (mode) => {
+    if (!mode || mode === chatMode) return;
+    chatMode = mode;
+    updateModeTabs();
+    if (chatMode === 'dm') {
+      if (activePeerId) {
+        const btn = document.querySelector(`.dm-user-item[data-peer-id="${activePeerId}"]`);
+        const name = btn ? btn.querySelector('.fw-semibold')?.textContent : 'User';
+        setActivePeer(activePeerId, name);
+      } else if (dmUserList) {
+        const first = dmUserList.querySelector('.dm-user-item');
+        if (first) {
+          const pid = Number(first.dataset.peerId);
+          const name = first.querySelector('.fw-semibold')?.textContent || 'User';
+          markActiveButton(pid);
+          setActivePeer(pid, name);
+        } else {
+          dmPeerName.textContent = 'Select a user';
+          if (dmSendBtn) dmSendBtn.disabled = true;
+          dmMessageList.innerHTML = '<div class="text-center text-muted py-3">No users available.</div>';
+        }
+      }
+    } else {
+      const matterBtn = activeMatterId ? document.querySelector(`.matter-item[data-matter-id="${activeMatterId}"]`) : matterListContainer?.querySelector('.matter-item');
+      if (matterBtn) {
+        const mid = Number(matterBtn.dataset.matterId);
+        const name = matterBtn.querySelector('.fw-semibold')?.textContent || 'Matter';
+        document.querySelectorAll('.matter-item').forEach(b => b.classList.toggle('active', Number(b.dataset.matterId) === mid));
+        setActiveMatter(mid, name);
+      } else {
+        dmPeerName.textContent = 'Select a matter';
+        if (dmSendBtn) dmSendBtn.disabled = true;
+        dmMessageList.innerHTML = '<div class="text-center text-muted py-3">No matters available.</div>';
+      }
+    }
+  };
+
+  const filterMatterList = () => {
+    if (!matterListContainer) return;
+    const term = (listSearchInput?.value || '').toLowerCase();
+    matterListContainer.querySelectorAll('.matter-item').forEach(btn => {
+      const text = (btn.textContent || '').toLowerCase();
+      btn.classList.toggle('d-none', term && !text.includes(term));
+    });
+  };
+
+  const currentAttachmentInput = () => chatMode === 'matter' ? matterAttachmentInput : dmAttachmentInput;
+
+  const setAttachmentLabel = (file) => {
+    if (!dmAttachmentLabel) return;
+    if (!file) {
+      dmAttachmentLabel.textContent = 'No attachment';
+    } else {
+      const kb = Math.max(1, Math.round(file.size / 1024));
+      dmAttachmentLabel.textContent = `${file.name} (${kb} KB)`;
+    }
+  };
+
+  const clearAttachment = () => {
+    if (dmAttachmentInput) dmAttachmentInput.value = '';
+    if (matterAttachmentInput) matterAttachmentInput.value = '';
+    setAttachmentLabel(null);
+  };
+
+  if (dmAttachBtn) {
+    dmAttachBtn.addEventListener('click', () => {
+      const input = currentAttachmentInput();
+      if (input) input.click();
+    });
+  }
+  modeTabs.forEach(btn => {
+    btn.addEventListener('click', () => switchMode(btn.getAttribute('data-mode-tab')));
+  });
+
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', () => openSidebar());
+  }
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', () => closeSidebar());
+  }
+  if (dmAttachmentInput) {
+    dmAttachmentInput.addEventListener('change', () => setAttachmentLabel(dmAttachmentInput.files?.[0]));
+  }
+  if (matterAttachmentInput) {
+    matterAttachmentInput.addEventListener('change', () => setAttachmentLabel(matterAttachmentInput.files?.[0]));
+  }
+
+  // Paste image support into message box (image when in matter mode)
+  if (dmMessageInput) {
+    dmMessageInput.addEventListener('paste', (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageItem = items.find(i => i.type && i.type.startsWith('image/'));
+      if (!imageItem) return;
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      if (chatMode !== 'matter' && chatMode !== 'dm') return;
+      e.preventDefault();
+      if (chatMode === 'matter' && !file.type.startsWith('image/')) return;
+      const input = currentAttachmentInput();
+      if (!input) return;
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      setAttachmentLabel(file);
+    });
+  }
+
+  if (dmForm) {
+    dmForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = dmMessageInput.value.trim();
+      if (chatMode === 'dm') {
+        if (!activePeerId) {
+          alert('Select a user to chat with.');
+          return;
+        }
+        const file = dmAttachmentInput?.files?.[0];
+        if (!text && !file) return;
+        dmPeerInput.value = activePeerId;
+        try {
+          const fd = new FormData();
+          fd.append('peer_id', activePeerId);
+          if (text) fd.append('message', text);
+          if (file) fd.append('attachment', file);
+          const res = await fetch('/chat/send', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' },
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.message || 'Send failed');
+          renderDmMessage(data.message);
+          dmMessageInput.value = '';
+          clearAttachment();
+          closeSidebar();
+          bumpPeerToTop(activePeerId);
+        } catch (err) {
+          alert(err.message || 'Failed to send message');
+        }
+      } else {
+        if (!activeMatterId) {
+          alert('Pilih matter untuk diskusi.');
+          return;
+        }
+        const file = matterAttachmentInput?.files?.[0];
+        if (!text && !file) return;
+        try {
+          const fd = new FormData();
+          if (text) fd.append('message', text);
+          if (file) fd.append('image', file);
+          const res = await fetch(`/matters/${activeMatterId}/discuss`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' },
+            body: fd
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.message || 'Send failed');
+          if (data.message) renderMatterMessage(data.message);
+          dmMessageInput.value = '';
+          clearAttachment();
+          closeSidebar();
+        } catch (err) {
+          alert(err.message || 'Failed to send message');
+        }
+      }
+    });
+  }
+
+  const socket = window.appSocket || io({ transports: ['websocket', 'polling'] });
+  window.appSocket = socket;
+  socket.on('connect', () => {
+    if (CURRENT_USER_ID) socket.emit('join_user', CURRENT_USER_ID);
+  });
+
+  socket.on('dm:new', (msg) => {
+    if (!msg) return;
+    const involvesMe = msg.sender?.id === CURRENT_USER_ID || msg.receiver?.id === CURRENT_USER_ID;
+    if (!involvesMe) return;
+    const otherId = msg.sender?.id === CURRENT_USER_ID ? msg.receiver?.id : msg.sender?.id;
+    if (otherId && otherId !== activePeerId) {
+      dmUnread[otherId] = (dmUnread[otherId] || 0) + 1;
+      updateUnreadBadge(otherId);
+    }
+    if (activePeerId && otherId === activePeerId) {
+      renderDmMessage(msg);
+      markRead(activePeerId);
+    }
+    bumpPeerToTop(otherId);
+  });
+
+  socket.on('chat:new', (msg) => {
+    if (!msg || !msg.matter_id) return;
+    if (chatMode === 'matter' && activeMatterId === msg.matter_id) {
+      renderMatterMessage(msg);
+      clearMatterUnread(activeMatterId);
+    } else {
+      matterUnread[msg.matter_id] = (matterUnread[msg.matter_id] || 0) + 1;
+      updateMatterBadge(msg.matter_id);
+    }
+  });
+
+  socket.on('matter:new', (msg) => {
+    if (!msg || !msg.matter_id) return;
+    if (chatMode === 'matter' && activeMatterId === msg.matter_id) return;
+    matterUnread[msg.matter_id] = (matterUnread[msg.matter_id] || 0) + 1;
+    updateMatterBadge(msg.matter_id);
+  });
+
+  // Auto-load initial peer if provided
+  updateModeTabs();
+  const firstBtn = document.querySelector('.dm-user-item');
+  const firstMatterBtn = document.querySelector('.matter-item');
+
+  if (activePeerId) {
+    markActiveButton(activePeerId);
+    const activeBtn = document.querySelector(`.dm-user-item[data-peer-id="${activePeerId}"]`);
+    const name = activeBtn ? activeBtn.querySelector('.fw-semibold')?.textContent : 'User';
+    setActivePeer(activePeerId, name);
+  } else if (firstBtn) {
+    const pid = Number(firstBtn.dataset.peerId);
+    const name = firstBtn.querySelector('.fw-semibold')?.textContent || 'User';
+    markActiveButton(pid);
+    setActivePeer(pid, name);
+  } else if (firstMatterBtn) {
+    const mid = Number(firstMatterBtn.dataset.matterId);
+    const name = firstMatterBtn.querySelector('.fw-semibold')?.textContent || 'Matter';
+    document.querySelectorAll('.matter-item').forEach(b => b.classList.toggle('active', Number(b.dataset.matterId) === mid));
+    setActiveMatter(mid, name);
+  } else {
+    if (dmMessageList) dmMessageList.innerHTML = '<div class="text-center text-muted py-3">No conversations available.</div>';
+    if (dmSendBtn) dmSendBtn.disabled = true;
+  }
+
+  closeSidebar();
+</script>
+
+<%- include('../partials/footer') %>

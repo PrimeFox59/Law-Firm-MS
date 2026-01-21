@@ -1,0 +1,175 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="mb-4">
+    <a href="/invoices" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2"></i>Back to Invoices
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="card-header bg-primary text-white">
+      <h4 class="mb-0">Create Invoice</h4>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/invoices">
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Invoice Number *</label>
+            <input type="text" class="form-control" name="invoice_number" value="INV-<%= Date.now() %>" required>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Client *</label>
+            <select class="form-select" name="contact_id" required>
+              <option value="">Select Client</option>
+              <% contacts.forEach(c => { %>
+                <option value="<%= c.id %>"><%= c.name %></option>
+              <% }); %>
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Related Matter</label>
+            <select class="form-select" name="matter_id">
+              <option value="">None</option>
+              <% matters.forEach(m => { %>
+                <option value="<%= m.id %>"><%= m.matter_name %></option>
+              <% }); %>
+            </select>
+          </div>
+
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Issue Date *</label>
+            <input type="date" class="form-control" name="issue_date" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          </div>
+
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Due Date *</label>
+            <input type="date" class="form-control" name="due_date" required>
+          </div>
+
+          <div class="col-md-12 mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Invoice Items</h5>
+              <small class="text-muted">Amount otomatis dari Qty × Price</small>
+            </div>
+            <div id="billItems">
+              <div class="row mb-2 bill-item invoice-item-row">
+                <div class="col-md-5">
+                  <input type="text" class="form-control" name="bills[0][description]" placeholder="Description" required>
+                </div>
+                <div class="col-md-2">
+                  <input type="number" class="form-control js-qty" name="bills[0][quantity]" placeholder="Qty" value="1" step="0.01" min="0">
+                </div>
+                <div class="col-md-2">
+                  <input type="number" class="form-control js-price" name="bills[0][unit_price]" placeholder="Price" step="0.01" min="0">
+                </div>
+                <div class="col-md-2">
+                  <input type="text" class="form-control js-amount" name="bills[0][amount]" placeholder="Auto-calculated" readonly>
+                </div>
+                <div class="col-md-1">
+                  <button type="button" class="btn btn-outline-danger" onclick="removeItem(this)">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addItem()">
+              <i class="fas fa-plus me-1"></i>Add Item
+            </button>
+          </div>
+
+          <div class="col-md-4 mb-3">
+            <label class="form-label">Tax Rate (%)</label>
+            <input type="number" class="form-control" name="tax_rate" value="0" step="0.01">
+          </div>
+
+          <div class="col-md-4 mb-3">
+            <label class="form-label">Discount</label>
+            <input id="discount" type="text" class="form-control" name="discount_amount" value="0" placeholder="50000 atau 10%">
+            <small id="discount-helper" class="text-muted">Isi nominal rupiah (misal 50000). Tambahkan % jika ingin persen (misal 10%).</small>
+          </div>
+
+          <div class="col-md-12 mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="notes" rows="3"></textarea>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">
+          <i class="fas fa-save me-2"></i>Create Invoice
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+let itemCount = 1;
+
+function addItem() {
+  const html = `
+    <div class="row mb-2 bill-item invoice-item-row">
+      <div class="col-md-5">
+        <input type="text" class="form-control" name="bills[${itemCount}][description]" placeholder="Description" required>
+      </div>
+      <div class="col-md-2">
+        <input type="number" class="form-control js-qty" name="bills[${itemCount}][quantity]" placeholder="Qty" value="1" step="0.01" min="0">
+      </div>
+      <div class="col-md-2">
+        <input type="number" class="form-control js-price" name="bills[${itemCount}][unit_price]" placeholder="Price" step="0.01" min="0">
+      </div>
+      <div class="col-md-2">
+        <input type="text" class="form-control js-amount" name="bills[${itemCount}][amount]" placeholder="Auto-calculated" readonly>
+      </div>
+      <div class="col-md-1">
+        <button type="button" class="btn btn-outline-danger" onclick="removeItem(this)">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    </div>
+  `;
+  document.getElementById('billItems').insertAdjacentHTML('beforeend', html);
+  const rows = document.querySelectorAll('.bill-item');
+  bindRow(rows[rows.length - 1]);
+  itemCount++;
+}
+
+function removeItem(btn) {
+  if (document.querySelectorAll('.bill-item').length > 1) {
+    btn.closest('.bill-item').remove();
+  }
+}
+
+function recalcRow(row) {
+  const qty = parseFloat(row.querySelector('.js-qty')?.value || '0');
+  const price = parseFloat(row.querySelector('.js-price')?.value || '0');
+  const amountEl = row.querySelector('.js-amount');
+  const total = qty * price;
+  if (amountEl) amountEl.value = isNaN(total) ? '' : total.toFixed(2);
+}
+
+function bindRow(row) {
+  if (!row) return;
+  row.querySelectorAll('.js-qty, .js-price').forEach(input => {
+    input.addEventListener('input', () => recalcRow(row));
+  });
+  recalcRow(row);
+}
+
+document.querySelectorAll('.invoice-item-row').forEach(bindRow);
+
+const discountInput = document.getElementById('discount');
+const discountHelper = document.getElementById('discount-helper');
+if (discountInput && discountHelper) {
+  discountInput.addEventListener('input', () => {
+    const v = discountInput.value.trim();
+    discountHelper.textContent = v.endsWith('%')
+      ? 'Diskon persen dari subtotal (contoh: 10%).'
+      : 'Diskon nominal dalam rupiah (contoh: 50000).';
+  });
+}
+</script>
+
+<%- include('../partials/footer') %>

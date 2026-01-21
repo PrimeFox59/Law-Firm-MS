@@ -1,0 +1,759 @@
+<%- include('../partials/header') %>
+
+<style>
+  :root {
+    --blue-900: #0b1e3a;
+    --blue-700: #184380;
+    --blue-600: #1f5fb3;
+    --blue-500: #2f7de6;
+    --blue-100: #e7f1ff;
+    --indigo-soft: #5c6bc0;
+    --card-glow: 0 12px 32px rgba(15, 76, 129, 0.15);
+    --border-soft: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  .page-shell { background: linear-gradient(135deg, #f4f8ff, #e7f1ff); min-height: 100vh; }
+
+  .aura-card { border: none; background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(231,241,255,0.86)); box-shadow: var(--card-glow); backdrop-filter: blur(6px); transition: transform 160ms ease, box-shadow 160ms ease; border-radius: 16px; }
+  .aura-card:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(15,76,129,0.2); }
+
+  .stat-card { border: none; background: linear-gradient(135deg, #f0f6ff, #e3edff); border-radius: 14px; padding: 14px 16px; box-shadow: 0 10px 28px rgba(24,67,128,0.12); }
+  .pill { border-radius: 999px; padding: 4px 10px; background: rgba(47,125,230,0.12); color: #1f5fb3; font-weight: 600; font-size: 12px; }
+
+  .chat-wrapper { max-height: 440px; overflow-y: auto; padding: 0.75rem; background: linear-gradient(180deg, rgba(47,125,230,0.08), rgba(255,255,255,0.9)); border: var(--border-soft); border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
+  .chat-bubble { max-width: 78%; padding: 12px 14px; border-radius: 14px; position: relative; margin-bottom: 12px; box-shadow: 0 10px 18px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.03); }
+  .chat-bubble.me { margin-left: auto; background: linear-gradient(135deg, #2f7de6, #5c6bc0); color: #fff; }
+  .chat-bubble.other { margin-right: auto; background: #ffffff; border: 1px solid #e5e7eb; color: #111827; }
+  .chat-meta { font-size: 12px; opacity: 0.8; }
+  .chat-name { font-weight: 600; }
+
+  .task-list { max-height: none; }
+  .doc-list { max-height: none; }
+
+  /* Keep sidebar cards uniform height */
+  .equal-stack { display: flex; flex-direction: column; gap: 1rem; }
+  .equal-card { display: flex; flex-direction: column; height: 340px; }
+  @media (min-width: 992px) { .equal-card { height: 360px; } }
+  .equal-card .card-body { flex: 1; min-height: 0; overflow-y: auto; }
+  .equal-card .card-footer { background: transparent; }
+
+  .qa-btn { border-radius: 12px; padding: 10px 14px; font-weight: 600; border: 1px solid transparent; box-shadow: 0 8px 16px rgba(31,95,179,0.12); transition: transform 120ms ease, box-shadow 120ms ease; }
+  .qa-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(31,95,179,0.15); }
+  .qa-btn-primary { background: rgba(47,125,230,0.12); color: #1f5fb3; border-color: rgba(47,125,230,0.3); }
+  .qa-btn-neutral { background: #f5f7fb; color: #374151; border-color: #e5e7eb; }
+  .qa-btn-success { background: #e8f6ef; color: #1b7c48; border-color: #c9ebd9; }
+  .qa-btn-info { background: #e5f5ff; color: #0f80c3; border-color: #c6e9fb; }
+  .qa-btn-dark { background: #ecf0f3; color: #111827; border-color: #dfe3e8; }
+  .qa-btn i { opacity: 0.8; }
+
+  .drop-zone { border: 1px dashed rgba(31,95,179,0.4); background: rgba(47,125,230,0.05); border-radius: 12px; padding: 10px 12px; transition: border-color 120ms ease, background 120ms ease; cursor: pointer; }
+  .drop-zone.active { border-color: #2f7de6; background: rgba(47,125,230,0.12); }
+  .drop-hint { font-size: 13px; color: #1f5fb3; }
+
+  .chat-image { max-width: 240px; max-height: 180px; border-radius: 10px; margin-top: 8px; cursor: pointer; object-fit: cover; border: 1px solid rgba(0,0,0,0.1); transition: transform 120ms ease; }
+  .chat-image:hover { transform: scale(1.02); }
+  .chat-text { margin-top: 4px; word-wrap: break-word; }
+
+  .card-header { border-bottom: none; background: transparent; }
+  .card { border-radius: 16px; }
+
+  .scroll-soft::-webkit-scrollbar { width: 8px; }
+  .scroll-soft::-webkit-scrollbar-thumb { background: rgba(31,95,179,0.28); border-radius: 999px; }
+  .scroll-soft::-webkit-scrollbar-track { background: rgba(47,125,230,0.08); border-radius: 999px; }
+
+  .section-label { font-weight: 700; color: var(--blue-700); letter-spacing: 0.02em; }
+
+  .stat-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; background: linear-gradient(135deg, rgba(47,125,230,0.14), rgba(92,107,192,0.18)); color: var(--blue-700); }
+</style>
+
+<div class="container-fluid p-4 page-shell">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <div class="text-muted text-uppercase small fw-semibold">Matter Detail</div>
+      <h3 class="fw-semibold mb-0"><%= matter.matter_name %> (<%= matter.matter_number %>)</h3>
+    </div>
+    <a href="/matters" class="btn btn-outline-secondary btn-sm">Back to Matters</a>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-3 col-6">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">Status</div>
+          <div class="fw-bold text-capitalize"><span class="badge bg-<%= matter.status === 'active' ? 'success' : 'secondary' %>"><%= matter.status %></span></div>
+        </div>
+        <i class="fas fa-circle-check text-success"></i>
+      </div>
+    </div>
+    <div class="col-lg-3 col-6">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">Client</div>
+          <div class="fw-bold"><%= matter.client.name %></div>
+        </div>
+        <i class="fas fa-user text-primary"></i>
+      </div>
+    </div>
+    <div class="col-lg-3 col-6">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">Tasks</div>
+          <div class="fw-bold"><%= tasks ? tasks.length : 0 %> open</div>
+        </div>
+        <i class="fas fa-list-check text-warning"></i>
+      </div>
+    </div>
+    <div class="col-lg-3 col-6">
+      <div class="stat-card d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">Invoices</div>
+          <div class="fw-bold"><%= invoices ? invoices.length : 0 %></div>
+        </div>
+        <i class="fas fa-file-invoice-dollar text-info"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3 aura-card">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="border rounded-3 p-3 h-100 bg-white shadow-sm aura-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-semibold">Matter Info</div>
+              <span class="pill text-capitalize"><%= matter.case_area || 'General' %></span>
+              <div class="d-flex gap-2">
+                <a href="/matters/<%= matter.id %>/edit" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit me-1"></i>Edit</a>
+              </div>
+            </div>
+            <div class="d-flex flex-column gap-1 small text-muted">
+              <div>
+                <i class="fas fa-user-tie me-1 text-secondary"></i>Responsible Attorney:
+                <% const respAtts = (matter.responsibleAttorneys && matter.responsibleAttorneys.length)
+                  ? matter.responsibleAttorneys
+                  : (matter.responsibleAttorney ? [matter.responsibleAttorney] : []); %>
+                <span class="fw-semibold text-dark">
+                  <% if (respAtts.length) { %>
+                    <% respAtts.forEach((att, idx) => { %>
+                      <span class="badge bg-light text-dark me-1 mb-1"><%= att.full_name %><%= idx === 0 ? ' (Lead)' : '' %></span>
+                    <% }); %>
+                  <% } else { %>
+                    -
+                  <% } %>
+                </span>
+              </div>
+              <div><i class="fas fa-balance-scale me-1 text-secondary"></i>Dispute Resolution: <%= matter.dispute_resolution || '-' %></div>
+              <div><i class="fas fa-user-circle me-1 text-secondary"></i>Created By: <%= matter.creator ? matter.creator.full_name : '-' %></div>
+              <div><i class="fas fa-building me-1 text-secondary"></i>Client: <%= matter.client ? matter.client.name : '-' %></div>
+            </div>
+            <div class="mt-3">
+              <div class="fw-semibold mb-1">Description</div>
+              <div class="text-muted"><%= matter.description || 'No description' %></div>
+            </div>
+            <div class="mt-3 d-flex flex-wrap gap-2 small">
+              <span class="badge bg-light text-dark">Matter #: <%= matter.matter_number %></span>
+              <span class="badge bg-<%= matter.status === 'active' ? 'success' : 'secondary' %>">Status: <%= matter.status %></span>
+              <% if (matter.case_type) { %><span class="badge bg-primary-subtle text-primary">Case: <%= matter.case_type %></span><% } %>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="border rounded-3 p-3 h-100 bg-white shadow-sm aura-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-semibold">Quick Actions</div>
+              <span class="badge bg-light text-dark">Fast access</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <button class="qa-btn qa-btn-primary" data-bs-toggle="modal" data-bs-target="#tasksModal"><i class="fas fa-plus me-1"></i>Task</button>
+              <button class="qa-btn qa-btn-neutral" data-bs-toggle="modal" data-bs-target="#uploadModal"><i class="fas fa-upload me-1"></i>Upload Doc</button>
+              <a class="qa-btn qa-btn-success" href="/cost-journal/add"><i class="fas fa-money-check-alt me-1"></i>Add Expense</a>
+              <a class="qa-btn qa-btn-info" href="/calendar"><i class="fas fa-calendar-plus me-1"></i>Add Event</a>
+              <a class="qa-btn qa-btn-dark" href="/invoices/add"><i class="fas fa-file-invoice-dollar me-1"></i>Add Invoice</a>
+            </div>
+            <div class="p-3 rounded-3 bg-light">
+              <div class="fw-semibold mb-1">Billing Notes</div>
+              <div class="text-muted small">Track invoices and cost journals linked to this matter below.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card h-100 d-flex flex-column aura-card">
+        <div class="card-header bg-white d-flex flex-wrap gap-2 align-items-center">
+          <h5 class="mb-0">Discussion</h5>
+          <div class="ms-auto d-flex gap-2">
+            <input type="text" class="form-control form-control-sm" id="chatSearch" placeholder="Search chat..." style="width: 180px;">
+            <button class="btn btn-sm btn-outline-primary" id="chatSearchBtn"><i class="fas fa-search"></i></button>
+          </div>
+        </div>
+        <div class="card-body chat-wrapper flex-grow-1 scroll-soft" id="chatList"></div>
+        <div class="px-3 pb-3">
+          <button class="btn btn-sm btn-outline-secondary w-100" id="chatLoadMore">Load older</button>
+        </div>
+        <div class="card-footer bg-white">
+          <form id="chatForm" method="POST" action="/matters/<%= matter.id %>/discuss" enctype="multipart/form-data">
+            <div class="mb-2">
+              <textarea class="form-control" id="chatMessage" name="message" rows="2" placeholder="Type a message..."></textarea>
+            </div>
+            <div class="mb-2 drop-zone" id="chatDropZone">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="drop-hint">Click, drop, atau paste gambar untuk attach</div>
+                <div class="text-muted small" id="chatFileLabel">No file attached</div>
+              </div>
+              <input type="file" class="d-none" id="chatFile" name="image" accept="image/*">
+            </div>
+            <button type="submit" class="btn btn-primary">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4 equal-stack">
+      <div class="card aura-card equal-card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Tasks</h5>
+          <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#tasksModal">Manage</button>
+        </div>
+        <div class="card-body task-list scroll-soft">
+          <% if (tasks && tasks.length) { %>
+            <% tasks.forEach(t => { %>
+              <a class="d-flex justify-content-between align-items-start mb-2 p-2 border rounded text-decoration-none text-dark" href="/tasks/<%= t.id %>">
+                <div>
+                  <div class="fw-semibold"><%= t.title %></div>
+                  <div class="text-muted small"><%= t.description || '' %></div>
+                  <div class="text-muted small">Assignee: <%= t.assignee ? t.assignee.full_name : '-' %> • Priority: <%= t.priority %></div>
+                </div>
+                <div class="text-end">
+                  <div class="badge bg-light text-dark text-capitalize"><%= t.status %></div>
+                  <% if (t.due_date) { %>
+                    <div class="text-muted small"><%= new Date(t.due_date).toLocaleDateString() %></div>
+                  <% } %>
+                </div>
+              </a>
+            <% }) %>
+          <% } else { %>
+            <p class="text-muted">No tasks yet.</p>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="card aura-card equal-card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Documents</h5>
+          <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadModal">Upload</button>
+        </div>
+        <div class="card-body doc-list scroll-soft">
+          <% if (documents && documents.length) { %>
+            <% documents.slice(0, 8).forEach(d => { const filePath = (d.file_path || '').replace(/\\/g, '/'); %>
+              <div class="d-flex justify-content-between align-items-start mb-2 border-bottom pb-2">
+                <div>
+                  <a href="/<%= filePath %>" download class="fw-semibold d-block"><%= d.name %></a>
+                  <div class="text-muted small"><%= d.mime_type %></div>
+                  <div class="d-flex gap-2 mt-1 flex-wrap">
+                    <a class="small" href="/<%= filePath %>" download>Download</a>
+                    <button type="button" class="btn btn-link btn-sm p-0 small" data-bs-toggle="modal" data-bs-target="#reuploadModal" data-doc-id="<%= d.id %>" data-doc-name="<%= d.name %>">Reupload</button>
+                    <button type="button" class="btn btn-link text-danger btn-sm p-0 small" data-doc-delete="<%= d.id %>">Delete</button>
+                  </div>
+                </div>
+                <div class="text-end">
+                  <div class="text-muted small"><%= new Date(d.created_at).toLocaleDateString() %></div>
+                </div>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <p class="text-muted">No documents yet.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4 equal-stack">
+      <div class="card h-100 aura-card equal-card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Invoices</h5>
+          <a href="/invoices" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="card-body scroll-soft">
+          <% if (invoices && invoices.length) { %>
+            <% invoices.forEach(inv => { const total = parseFloat(inv.total_amount || 0); const paid = parseFloat(inv.paid_amount || 0); const balance = total - paid; %>
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                <div>
+                  <div class="fw-semibold"><%= inv.invoice_number %></div>
+                  <div class="text-muted small">Total: Rp <%= total.toLocaleString() %> • Paid: Rp <%= paid.toLocaleString() %></div>
+                </div>
+                <div class="text-end">
+                  <div class="badge bg-light text-dark text-capitalize"><%= inv.status %></div>
+                  <div class="text-muted small">Balance: Rp <%= balance.toLocaleString() %></div>
+                </div>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <p class="text-muted">No invoices yet.</p>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="card h-100 aura-card equal-card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Cost Journals</h5>
+          <a href="/cost-journal" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="card-body scroll-soft">
+          <% if (costJournals && costJournals.length) { %>
+            <% costJournals.slice(0,8).forEach(cj => { const isTime = cj.entry_type === 'time'; %>
+              <div class="d-flex justify-content-between align-items-start mb-2 p-2 border rounded">
+                <div>
+                  <div class="fw-semibold"><%= isTime ? 'Time Entry' : 'Expense' %></div>
+                  <div class="text-muted small"><%= cj.description %></div>
+                  <div class="text-muted small">By: <%= cj.user ? cj.user.full_name : '-' %></div>
+                </div>
+                <div class="text-end">
+                  <% if (isTime) { %>
+                    <div class="fw-semibold"><%= parseFloat(cj.hours || 0).toFixed(2) %>h</div>
+                    <div class="text-muted small">Rate: Rp <%= parseFloat(cj.rate || 0).toLocaleString() %></div>
+                  <% } else { %>
+                    <div class="fw-semibold">Rp <%= parseFloat(cj.amount || 0).toLocaleString() %></div>
+                    <div class="text-muted small"><%= cj.expense_category || '-' %></div>
+                  <% } %>
+                  <div class="text-muted small"><%= cj.date ? new Date(cj.date).toLocaleDateString() : '' %></div>
+                </div>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <p class="text-muted">No cost journals yet.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tasks Modal -->
+<div class="modal fade" id="tasksModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tasks for this Matter</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="task-list mb-3">
+          <% if (tasks && tasks.length) { %>
+            <% tasks.forEach(t => { %>
+              <div class="d-flex justify-content-between align-items-start mb-3 p-2 border rounded">
+                <div>
+                  <div class="fw-semibold"><%= t.title %></div>
+                  <div class="text-muted" style="font-size:13px;">
+                    <%= t.description || '' %>
+                  </div>
+                  <div class="mt-1" style="font-size:12px;">
+                    Assignee: <%= t.assignee ? t.assignee.full_name : '-' %> | Status: <%= t.status %> | Priority: <%= t.priority %>
+                  </div>
+                </div>
+                <% if (t.due_date) { %>
+                  <span class="badge bg-light text-dark"><%= new Date(t.due_date).toLocaleDateString() %></span>
+                <% } %>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <p class="text-muted">No tasks yet.</p>
+          <% } %>
+        </div>
+
+        <h6 class="fw-bold">Create Task</h6>
+        <form method="POST" action="/matters/<%= matter.id %>/tasks">
+          <div class="mb-2">
+            <label class="form-label">Title *</label>
+            <input type="text" name="title" class="form-control" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Description</label>
+            <textarea name="description" class="form-control" rows="2"></textarea>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Assignee *</label>
+            <select name="assignee_id" class="form-select" required>
+              <option value="">Select user</option>
+              <% assignees.forEach(a => { %>
+                <option value="<%= a.id %>"><%= a.full_name %> (<%= a.account_type %>)</option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="row g-2">
+            <div class="col-md-6 mb-2">
+              <label class="form-label">Due Date</label>
+              <input type="date" name="due_date" class="form-control">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label class="form-label">Priority</label>
+              <select name="priority" class="form-select">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-2">
+            <button type="submit" class="btn btn-success w-100">Add Task</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Modal (placeholder trigger not needed as we use inline card) -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="uploadForm" method="POST" action="/matters/<%= matter.id %>/documents" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label">Select file(s)</label>
+            <input type="file" name="files" class="form-control" multiple required>
+            <div class="form-text">You can select up to 10 files. No size limit enforced here.</div>
+          </div>
+          <p class="text-muted" style="font-size:13px;">Files will be tagged to this matter automatically.</p>
+          <div class="progress mb-2 d-none" id="uploadProgressWrap">
+            <div class="progress-bar" role="progressbar" style="width: 0%;" id="uploadProgressBar">0%</div>
+          </div>
+          <div class="small text-muted mb-2" id="uploadProgressStatus"></div>
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reupload Modal -->
+<div class="modal fade" id="reuploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Reupload Document</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="reuploadForm" method="POST" enctype="multipart/form-data">
+        <div class="modal-body">
+          <p class="mb-2" id="reuploadDocName"></p>
+          <div class="mb-3">
+            <label class="form-label">Select new file</label>
+            <input type="file" name="file" class="form-control" required>
+          </div>
+          <div class="progress mb-2 d-none" id="reuploadProgressWrap">
+            <div class="progress-bar" role="progressbar" style="width: 0%;" id="reuploadProgressBar">0%</div>
+          </div>
+          <div class="small text-muted mb-2" id="reuploadProgressStatus"></div>
+          <p class="text-muted small mb-0">The previous file will be replaced and revision incremented.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const MATTER_ID = <%= matter.id %>;
+  const CURRENT_USER_ID = <%= user ? user.id : 'null' %>;
+
+  // Realtime chat via Socket.IO
+  const chatList = document.getElementById('chatList');
+  const chatLoadMore = document.getElementById('chatLoadMore');
+  const chatSearchInput = document.getElementById('chatSearch');
+  const chatSearchBtn = document.getElementById('chatSearchBtn');
+  const chatState = { page: 1, pageSize: 20, hasMore: true, search: '' };
+  const chatSeenIds = new Set();
+
+  const escapeHtml = (str = '') => str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const renderMessage = (msg, opts = { prepend: false }) => {
+    if (!chatList || !msg) return;
+    if (msg.id && chatSeenIds.has(msg.id)) return;
+    if (msg.id) chatSeenIds.add(msg.id);
+    const isMe = CURRENT_USER_ID && msg.user && Number(msg.user.id) === Number(CURRENT_USER_ID);
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${isMe ? 'me' : 'other'}`;
+    const createdAt = msg.created_at ? new Date(msg.created_at) : new Date();
+    const textHtml = msg.text ? `<div class="chat-text">${escapeHtml(msg.text)}</div>` : '';
+    const imageHtml = msg.imagePath ? `<a href="${msg.imagePath}" target="_blank"><img src="${msg.imagePath}" alt="Attachment" class="chat-image" /></a>` : '';
+    bubble.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="chat-name">${escapeHtml(msg.user?.full_name || 'User')}</div>
+          <div class="chat-meta">${escapeHtml(msg.user?.account_type || '')}</div>
+        </div>
+        <div class="chat-meta">${createdAt.toLocaleString()}</div>
+      </div>
+      ${textHtml}
+      ${imageHtml}
+    `;
+    if (opts.prepend && chatList.firstChild) {
+      chatList.insertBefore(bubble, chatList.firstChild);
+    } else {
+      chatList.appendChild(bubble);
+      chatList.scrollTop = chatList.scrollHeight;
+    }
+  };
+
+  const renderMessages = (messages, { appendOlder = false } = {}) => {
+    if (!chatList) return;
+    if (!appendOlder) {
+      chatList.innerHTML = '';
+      chatSeenIds.clear();
+    }
+    (messages || []).forEach(m => renderMessage(m, { prepend: appendOlder }));
+  };
+
+  const updateLoadMore = () => {
+    if (!chatLoadMore) return;
+    chatLoadMore.disabled = !chatState.hasMore;
+    chatLoadMore.textContent = chatState.hasMore ? 'Load older' : 'No more messages';
+  };
+
+  const fetchMessages = async ({ appendOlder = false, pageOverride = null } = {}) => {
+    const page = pageOverride || (appendOlder ? chatState.page + 1 : 1);
+    const params = new URLSearchParams({ page, pageSize: chatState.pageSize });
+    if (chatState.search) params.append('search', chatState.search);
+    try {
+      const res = await fetch(`/matters/${MATTER_ID}/discuss/list?${params.toString()}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Failed to load messages');
+      if (appendOlder) {
+        renderMessages(data.messages, { appendOlder: true });
+      } else {
+        renderMessages(data.messages, { appendOlder: false });
+      }
+      chatState.page = page;
+      chatState.hasMore = data.pagination?.hasMore;
+      updateLoadMore();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const socket = window.appSocket || io({ transports: ['websocket', 'polling'] });
+  window.appSocket = socket;
+  socket.on('connect', () => {
+    socket.emit('join_matter', MATTER_ID);
+  });
+  socket.on('chat:new', (msg) => renderMessage(msg));
+
+  // Initial load
+  fetchMessages();
+
+  if (chatLoadMore) {
+    chatLoadMore.addEventListener('click', async () => {
+      if (!chatState.hasMore) return;
+      await fetchMessages({ appendOlder: true });
+    });
+  }
+
+  if (chatSearchInput && chatSearchBtn) {
+    const doSearch = async () => {
+      chatState.search = chatSearchInput.value.trim();
+      chatState.page = 1;
+      await fetchMessages({ appendOlder: false, pageOverride: 1 });
+    };
+    chatSearchBtn.addEventListener('click', doSearch);
+    chatSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doSearch();
+      }
+    });
+  }
+
+  // Wire reupload modal action
+  const reuploadModal = document.getElementById('reuploadModal');
+  if (reuploadModal) {
+    reuploadModal.addEventListener('show.bs.modal', (event) => {
+      const trigger = event.relatedTarget;
+      const docId = trigger?.getAttribute('data-doc-id');
+      const docName = trigger?.getAttribute('data-doc-name');
+      const form = document.getElementById('reuploadForm');
+      const nameLabel = document.getElementById('reuploadDocName');
+      if (form && docId) form.action = `/documents/${docId}/reupload`;
+      if (nameLabel) nameLabel.textContent = docName || '';
+    });
+  }
+
+  const bindUploadProgress = (formId, wrapId, barId, statusId) => {
+    const form = document.getElementById(formId);
+    const wrap = document.getElementById(wrapId);
+    const bar = document.getElementById(barId);
+    const status = document.getElementById(statusId);
+    if (!form) return;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const reset = () => {
+      if (wrap) wrap.classList.add('d-none');
+      if (bar) { bar.style.width = '0%'; bar.textContent = '0%'; }
+      if (status) status.textContent = '';
+      if (submitBtn) submitBtn.disabled = false;
+    };
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const xhr = new XMLHttpRequest();
+      if (wrap) wrap.classList.remove('d-none');
+      if (status) status.textContent = 'Uploading...';
+      if (submitBtn) submitBtn.disabled = true;
+
+      xhr.upload.onprogress = (evt) => {
+        if (!evt.lengthComputable || !bar) return;
+        const pct = Math.min(100, Math.max(0, Math.round((evt.loaded / evt.total) * 100)));
+        bar.style.width = `${pct}%`;
+        bar.textContent = `${pct}%`;
+      };
+
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (status) status.textContent = 'Upload complete';
+            setTimeout(() => window.location.reload(), 400);
+          } else {
+            if (status) status.textContent = 'Upload failed';
+            reset();
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        if (status) status.textContent = 'Upload failed';
+        reset();
+      };
+
+      xhr.open(form.method || 'POST', form.action);
+      xhr.send(fd);
+    });
+
+    const modal = form.closest('.modal');
+    if (modal) {
+      modal.addEventListener('hidden.bs.modal', reset);
+    }
+  };
+
+  bindUploadProgress('uploadForm', 'uploadProgressWrap', 'uploadProgressBar', 'uploadProgressStatus');
+  bindUploadProgress('reuploadForm', 'reuploadProgressWrap', 'reuploadProgressBar', 'reuploadProgressStatus');
+
+  // Handle delete with confirmation
+  document.querySelectorAll('[data-doc-delete]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-doc-delete');
+      const ok = confirm('Delete this document?');
+      if (!ok) return;
+      try {
+        const res = await fetch(`/documents/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          location.reload();
+        } else {
+          alert(data.message || 'Delete failed');
+        }
+      } catch (err) {
+        alert('Delete failed');
+      }
+    });
+  });
+
+  // Chat attachments: click/drag-drop/paste images into chat
+  const dropZone = document.getElementById('chatDropZone');
+  const fileInput = document.getElementById('chatFile');
+  const fileLabel = document.getElementById('chatFileLabel');
+  const chatForm = document.getElementById('chatForm');
+  const chatButton = chatForm?.querySelector('button[type="submit"]');
+
+  const setFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Only image files are allowed');
+      return;
+    }
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+    fileLabel.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+  };
+
+  if (dropZone && fileInput && fileLabel) {
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('active');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('active');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('active');
+      const file = e.dataTransfer.files?.[0];
+      setFile(file);
+    });
+
+    fileInput.addEventListener('change', () => setFile(fileInput.files?.[0]));
+  }
+
+  if (chatForm) {
+    chatForm.addEventListener('paste', (e) => {
+      const file = Array.from(e.clipboardData.items)
+        .map(item => item.getAsFile())
+        .find(f => f && f.type.startsWith('image/'));
+      if (file) {
+        e.preventDefault();
+        setFile(file);
+      }
+    });
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!chatButton) return chatForm.submit();
+      chatButton.disabled = true;
+      const fd = new FormData(chatForm);
+      try {
+        const res = await fetch(`/matters/${MATTER_ID}/discuss`, {
+          method: 'POST',
+          body: fd,
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Send failed');
+        if (data.message) {
+          renderMessage(data.message);
+        }
+        chatForm.reset();
+        fileLabel.textContent = 'No file attached';
+        fileInput.value = '';
+      } catch (err) {
+        alert(err.message || 'Failed to send message');
+      } finally {
+        chatButton.disabled = false;
+      }
+    });
+  }
+</script>
+
+<%- include('../partials/footer') %>

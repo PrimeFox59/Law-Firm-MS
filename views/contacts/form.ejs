@@ -1,0 +1,90 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="mb-4">
+    <a href="/contacts" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2"></i>Back to Contacts
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="card-header bg-primary text-white">
+      <h4 class="mb-0"><%= action === 'add' ? 'Add New Contact' : 'Edit Contact' %></h4>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/contacts<%= action === 'edit' && contact ? '/' + contact.id : '' %>">
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Entity Type *</label>
+            <select class="form-select" name="entity_type" required>
+              <option value="individual" <%= contact && contact.entity_type === 'individual' ? 'selected' : '' %>>Individual</option>
+              <option value="company" <%= contact && contact.entity_type === 'company' ? 'selected' : '' %>>Company</option>
+              <option value="other" <%= contact && contact.entity_type === 'other' ? 'selected' : '' %>>Other</option>
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Name *</label>
+            <input type="text" class="form-control" name="name" value="<%= contact ? contact.name : '' %>" required>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Primary Email</label>
+            <input
+              type="email"
+              class="form-control"
+              name="emails[0][email]"
+              value="<%= contact && contact.emails && contact.emails[0] ? contact.emails[0].email : '' %>"
+              placeholder="name@example.com"
+            >
+            <input type="hidden" name="emails[0][type]" value="work">
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Primary Phone</label>
+            <input
+              type="text"
+              class="form-control"
+              name="phones[0][phone]"
+              value="<%= contact && contact.phones && contact.phones[0] ? contact.phones[0].phone : '' %>"
+              placeholder="e.g. +62812xxxxxxx"
+            >
+            <input type="hidden" name="phones[0][type]" value="mobile">
+          </div>
+
+          <div class="col-md-12 mb-3">
+            <label class="form-label">Primary Address</label>
+            <textarea
+              class="form-control"
+              name="addresses[0][address]"
+              rows="2"
+              placeholder="Street, City, Country"
+            ><%= contact && contact.addresses && contact.addresses[0] ? contact.addresses[0].address : '' %></textarea>
+            <input type="hidden" name="addresses[0][type]" value="home">
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Is Client?</label>
+            <select class="form-select" name="is_client">
+              <option value="false" <%= contact && !contact.is_client ? 'selected' : '' %>>No</option>
+              <option value="true" <%= contact && contact.is_client ? 'selected' : '' %>>Yes</option>
+            </select>
+          </div>
+
+          <div class="col-md-12 mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="notes" rows="3"><%= contact ? contact.notes || '' : '' %></textarea>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary btn-lg">
+            <i class="fas fa-save me-2"></i>Save Contact
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

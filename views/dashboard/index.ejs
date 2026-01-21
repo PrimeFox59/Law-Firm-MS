@@ -1,0 +1,360 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4 page-content">
+  <div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-semibold mb-1">Personal Dashboard</h2>
+      <p class="text-muted mb-0">Welcome, <%= user.full_name %></p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge badge-soft badge-soft-info text-uppercase small"><%= user.account_type %></span>
+      <a href="/tasks" class="btn btn-gradient btn-sm">Create Task</a>
+    </div>
+  </div>
+
+  <!-- Key metrics -->
+  <div class="row g-3 mb-3 dash-metrics">
+    <div class="col-xl-3 col-md-6">
+      <div class="metric-card">
+        <div class="metric-icon"><i class="fas fa-briefcase"></i></div>
+        <div class="flex-grow-1">
+          <div class="text-muted small">Active Matters</div>
+          <div class="fs-4 fw-bold"><%= matters.length %></div>
+          <div class="small text-muted">Track live engagements</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+      <div class="metric-card">
+        <div class="metric-icon"><i class="fas fa-list-check"></i></div>
+        <div class="flex-grow-1">
+          <div class="text-muted small">Open Tasks</div>
+          <div class="fs-4 fw-bold"><%= todayTasks.length %></div>
+          <div class="small text-muted">Next 30 days & undated</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+      <div class="metric-card">
+        <div class="metric-icon"><i class="fas fa-user-check"></i></div>
+        <div class="flex-grow-1">
+          <div class="text-muted small">Need Approval</div>
+          <div class="fs-4 fw-bold"><%= approvalTasks.length %></div>
+          <div class="small text-muted">Awaiting your review</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+      <div class="metric-card">
+        <div class="metric-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="flex-grow-1">
+          <div class="text-muted small">Unpaid Invoices</div>
+          <div class="fs-4 fw-bold"><%= invoiceSummary.unpaid.count %></div>
+          <div class="small text-muted">IDR <%= invoiceSummary.unpaid.total.toLocaleString() %></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Left column: clock & calendar -->
+    <div class="col-lg-4 d-flex flex-column gap-3">
+      <div class="glass-card p-3 h-100 d-flex align-items-center justify-content-center">
+        <div class="text-center">
+          <div class="fs-1 fw-bold" id="clock">--:--:--</div>
+          <div class="text-muted" id="date">--</div>
+        </div>
+      </div>
+
+      <div class="glass-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Calendar</div>
+        </div>
+        <div id="mini-calendar" class="w-100"></div>
+      </div>
+    </div>
+
+    <!-- Middle column: events/tasks -->
+    <div class="col-lg-4 d-flex flex-column gap-3">
+      <div class="glass-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-calendar-alt text-primary"></i>
+            <span class="fw-semibold">Events</span>
+            <span class="pill">This week</span>
+          </div>
+        </div>
+        <% if (upcomingEvents.length > 0) { %>
+          <ul class="list-clean">
+            <% upcomingEvents.forEach(event => { %>
+              <li class="item">
+                <div>
+                  <div class="fw-semibold"><%= event.title %></div>
+                  <div class="text-muted small">
+                    <i class="far fa-clock me-1"></i><%= moment(event.start_datetime).format('ddd, MMM DD HH:mm') %>
+                    <% if (event.matter) { %> · <%= event.matter.matter_name %> <% } %>
+                  </div>
+                </div>
+                <span class="pill">Event</span>
+              </li>
+            <% }); %>
+          </ul>
+        <% } else { %>
+          <p class="text-muted text-center mb-0">Nothing to-do for today</p>
+        <% } %>
+      </div>
+
+      <div class="glass-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-list text-primary"></i>
+            <span class="fw-semibold">Tasks</span>
+            <span class="pill">Upcoming</span>
+          </div>
+          <a href="/tasks" class="btn btn-outline-primary btn-sm">View All</a>
+        </div>
+        <% if (upcomingTasks.length > 0) { %>
+          <ul class="list-clean">
+            <% upcomingTasks.forEach(task => { %>
+              <li class="item">
+                <div>
+                  <div class="fw-semibold"><%= task.title %></div>
+                  <div class="text-muted small">
+                    <i class="far fa-clock me-1"></i>
+                    <%= task.due_date ? moment(task.due_date).format('ddd, MMM DD HH:mm') : 'No due date' %>
+                    <% if (task.matter) { %> · <%= task.matter.matter_name %> <% } %>
+                  </div>
+                </div>
+                <span class="pill <%= task.priority === 'urgent' ? 'badge-soft-danger' : task.priority === 'high' ? 'badge-soft-warning' : 'badge-soft-info' %>">
+                  <%= task.priority %>
+                </span>
+              </li>
+            <% }); %>
+          </ul>
+        <% } else { %>
+          <p class="text-muted text-center mb-0">No upcoming tasks in the next 30 days</p>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Right column: account info, invoice, matters -->
+    <div class="col-lg-4 d-flex flex-column gap-3">
+      <div class="glass-card p-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-check-circle text-primary"></i><span class="fw-semibold">Need Approval</span>
+          <span class="pill"><%= approvalTasks.length %></span>
+        </div>
+        <% if (approvalTasks.length > 0) { %>
+          <ul class="list-clean">
+            <% approvalTasks.forEach(t => { %>
+              <li class="item">
+                <div>
+                  <div class="fw-semibold"><%= t.title %></div>
+                  <div class="text-muted small">
+                    <%= t.matter ? t.matter.matter_name : 'No matter' %>
+                  </div>
+                </div>
+                <a href="/tasks/<%= t.id %>" class="btn btn-sm btn-outline-primary">Open</a>
+              </li>
+            <% }); %>
+          </ul>
+        <% } else { %>
+          <p class="text-muted mb-0">No approvals needed</p>
+        <% } %>
+      </div>
+
+      <div class="glass-card p-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-id-badge text-primary"></i><span class="fw-semibold">Account</span>
+        </div>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="rounded-circle bg-primary text-white fw-bold d-flex align-items-center justify-content-center" style="width:48px;height:48px;">
+            <%= user.full_name.charAt(0).toUpperCase() %>
+          </div>
+          <div>
+            <div class="fw-semibold"><%= user.full_name %></div>
+            <div class="text-muted small"><%= user.email %></div>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-3 small text-muted">
+          <div>
+            <div class="text-muted small">Company</div>
+            <div class="fw-semibold"><%= user.company || '-' %></div>
+          </div>
+          <div>
+            <div class="text-muted small">Hourly Rate</div>
+            <div class="fw-semibold">IDR <%= user.hourly_rate || 0 %></div>
+          </div>
+          <div>
+            <div class="text-muted small">Phone</div>
+            <div class="fw-semibold"> <%= user.phone || '-' %></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card p-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-file-invoice-dollar text-primary"></i><span class="fw-semibold">Invoice</span>
+        </div>
+        <div class="row g-2">
+          <div class="col-4">
+            <div class="mini-invoice text-center">
+              <div class="label">Draft</div>
+              <div class="value"><%= invoiceSummary.draft.count %></div>
+              <div class="meta text-warning">IDR <%= invoiceSummary.draft.total.toLocaleString() %></div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="mini-invoice text-center">
+              <div class="label">Unpaid</div>
+              <div class="value"><%= invoiceSummary.unpaid.count %></div>
+              <div class="meta text-danger">IDR <%= invoiceSummary.unpaid.total.toLocaleString() %></div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="mini-invoice text-center">
+              <div class="label">Paid</div>
+              <div class="value"><%= invoiceSummary.paid.count %></div>
+              <div class="meta text-success">IDR <%= invoiceSummary.paid.total.toLocaleString() %></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card p-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="fas fa-gavel text-primary"></i><span class="fw-semibold">Matters near deadline</span>
+        </div>
+        <% if (upcomingMatters.length > 0) { %>
+          <ul class="list-clean">
+            <% upcomingMatters.forEach(m => { %>
+              <li class="item">
+                <div>
+                  <div class="fw-semibold"><%= m.matter_name %></div>
+                  <div class="text-muted small">
+                    <i class="far fa-clock me-1"></i><%= m.end_date ? moment(m.end_date).format('ddd, MMM DD') : 'No end date' %>
+                    · <%= m.client?.name || '-' %>
+                  </div>
+                </div>
+                <span class="pill <%= m.status === 'active' ? 'badge-soft-success' : m.status === 'pending' ? 'badge-soft-warning' : 'badge-soft-info' %>"><%= m.status %></span>
+              </li>
+            <% }); %>
+          </ul>
+        <% } else { %>
+          <p class="text-muted text-center mb-0">No matters nearing deadline</p>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Clock
+  function updateClock() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('date').textContent = now.toLocaleDateString('en-US', options);
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Mini calendar with clickable dates showing events of month
+  (function renderCalendar() {
+    const container = document.getElementById('mini-calendar');
+    if (!container) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startWeekDay = firstDay.getDay();
+    const totalDays = lastDay.getDate();
+    container.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.className = 'd-flex justify-content-between align-items-center mb-2 fw-semibold';
+    title.innerHTML = `${now.toLocaleString('en-US', { month: 'long' })} ${year}`;
+    container.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'd-grid';
+    grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+    grid.style.gap = '6px';
+
+    const days = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+    days.forEach(d => {
+      const cell = document.createElement('div');
+      cell.className = 'text-center text-muted small';
+      cell.textContent = d;
+      grid.appendChild(cell);
+    });
+
+    for (let i = 0; i < startWeekDay; i++) {
+      const blank = document.createElement('div');
+      grid.appendChild(blank);
+    }
+
+    const eventsByDay = {};
+    <% monthEvents.forEach(ev => { %>
+      eventsByDay['<%= moment(ev.start_datetime).format('YYYY-MM-DD') %>'] = eventsByDay['<%= moment(ev.start_datetime).format('YYYY-MM-DD') %>'] || [];
+      eventsByDay['<%= moment(ev.start_datetime).format('YYYY-MM-DD') %>'].push({
+        title: '<%= ev.title.replace(/'/g, "\'") %>',
+        time: '<%= moment(ev.start_datetime).format('HH:mm') %>',
+        matter: '<%= ev.matter ? ev.matter.matter_name.replace(/'/g, "\'") : '' %>'
+      });
+    <% }); %>
+
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'btn btn-light border text-center py-2 position-relative';
+      cell.textContent = d;
+      if (eventsByDay[dateStr]) {
+        const dot = document.createElement('span');
+        dot.className = 'position-absolute start-50 translate-middle-x';
+        dot.style.bottom = '6px';
+        dot.style.width = '6px';
+        dot.style.height = '6px';
+        dot.style.borderRadius = '50%';
+        dot.style.background = '#4f46e5';
+        cell.appendChild(dot);
+        cell.onclick = () => showEvents(dateStr, eventsByDay[dateStr]);
+      }
+      grid.appendChild(cell);
+    }
+
+    container.appendChild(grid);
+  })();
+
+  function showEvents(dateStr, events) {
+    const list = events.map(ev => `<li class="list-group-item">
+      <div class="fw-semibold">${ev.title}</div>
+      <div class="text-muted small">${ev.time}${ev.matter ? ' · ' + ev.matter : ''}</div>
+    </li>`).join('');
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Events on ${dateStr}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <ul class="list-group list-group-flush">${list || '<li class="list-group-item">No events</li>'}</ul>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const bsModal = new bootstrap.Modal(modal);
+    modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    bsModal.show();
+  }
+</script>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,39 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <h2 class="mb-4">Google Account Settings</h2>
+
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">Google Integration</h5>
+    </div>
+    <div class="card-body">
+      <% if (user.google_connected) { %>
+        <div class="alert alert-success">
+          <i class="fab fa-google me-2"></i>
+          <strong>Connected!</strong> Your Google account is connected.
+        </div>
+
+        <p><strong>Google ID:</strong> <%= user.google_id %></p>
+        <p><strong>Connected Email:</strong> <%= user.email %></p>
+
+        <form method="POST" action="/settings/google/disconnect">
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-unlink me-2"></i>Disconnect Google Account
+          </button>
+        </form>
+      <% } else { %>
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle me-2"></i>
+          Connect your Google account to enable calendar synchronization and quick login.
+        </div>
+
+        <a href="/auth/google" class="btn btn-primary">
+          <i class="fab fa-google me-2"></i>Connect Google Account
+        </a>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

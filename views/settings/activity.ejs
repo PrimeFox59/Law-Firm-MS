@@ -1,0 +1,42 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <h2 class="mb-4">Activity Log</h2>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Module</th>
+              <th>Details</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (logs && logs.length > 0) { %>
+              <% logs.forEach(log => { %>
+                <tr>
+                  <td><%= new Date(log.created_at).toLocaleString() %></td>
+                  <td><strong><%= log.action %></strong></td>
+                  <td><span class="badge bg-info"><%= log.module || 'System' %></span></td>
+                  <td><%= log.details || '-' %></td>
+                  <td><%= log.ip_address || '-' %></td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="5" class="text-center text-muted">No activity logs found</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

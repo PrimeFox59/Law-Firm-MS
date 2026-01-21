@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.development
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+logs/
+
+# Database (sqlite) artifacts
+database/*.db
+database/*.db-*
+database/*.sqlite
+database/*.sqlite3
+database/*.db-journal
+
+# Uploads and runtime data
+uploads/
+wa-sessions/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Secrets / credentials
+credentials.json
+credentials*.json
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.vscode/

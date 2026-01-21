@@ -1,0 +1,107 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <h2 class="mb-4">Profile Settings</h2>
+
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Personal Information</h5>
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/profile">
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-control" name="full_name" value="<%= user.full_name %>" required>
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" name="email" value="<%= user.email %>" required>
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Phone</label>
+                <input type="text" class="form-control" name="phone" value="<%= user.phone || '' %>">
+              </div>
+
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Company</label>
+                <input type="text" class="form-control" name="company" value="<%= user.company || '' %>">
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label class="form-label">Hourly Rate</label>
+                <input type="number" class="form-control" name="hourly_rate" value="<%= user.hourly_rate %>" step="0.01">
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label class="form-label">Language</label>
+                <select class="form-select" name="language">
+                  <option value="en" <%= user.language === 'en' ? 'selected' : '' %>>English</option>
+                  <option value="id" <%= user.language === 'id' ? 'selected' : '' %>>Indonesian</option>
+                </select>
+              </div>
+
+              <div class="col-md-4 mb-3">
+                <label class="form-label">Theme</label>
+                <select class="form-select" name="theme">
+                  <option value="light" <%= user.theme === 'light' ? 'selected' : '' %>>Light</option>
+                  <option value="dark" <%= user.theme === 'dark' ? 'selected' : '' %>>Dark</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save me-2"></i>Save Changes
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Avatar Upload -->
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Profile Picture</h5>
+        </div>
+        <div class="card-body">
+          <form method="POST" action="/settings/profile/avatar" enctype="multipart/form-data">
+            <div class="mb-3">
+              <input type="file" class="form-control" name="avatar" accept="image/*" required>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-upload me-2"></i>Upload Avatar
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Recent Activity</h5>
+        </div>
+        <div class="card-body">
+          <% if (activityLogs && activityLogs.length > 0) { %>
+            <ul class="list-group list-group-flush">
+              <% activityLogs.slice(0, 5).forEach(log => { %>
+                <li class="list-group-item px-0">
+                  <small class="text-muted d-block"><%= log.action %></small>
+                  <small class="text-muted"><%= new Date(log.created_at).toLocaleString() %></small>
+                </li>
+              <% }); %>
+            </ul>
+          <% } else { %>
+            <p class="text-muted small">No recent activity</p>
+          <% } %>
+          <a href="/settings/activity" class="btn btn-sm btn-outline-primary mt-3">View All</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

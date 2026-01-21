@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>500 - Server Error</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .error-container {
+      text-align: center;
+      color: white;
+    }
+    .error-code {
+      font-size: 120px;
+      font-weight: 700;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="error-container">
+    <div class="error-code">500</div>
+    <h1>Server Error</h1>
+    <p class="lead">Something went wrong on our end.</p>
+    <a href="/dashboard" class="btn btn-light btn-lg mt-3">
+      <i class="fas fa-home me-2"></i>Go to Dashboard
+    </a>
+    
+    <% if (error && error.stack) { %>
+      <div class="mt-4 text-start">
+        <details class="bg-white text-dark p-3 rounded">
+          <summary>Error Details (Development Mode)</summary>
+          <pre class="mt-2"><%= error.stack %></pre>
+        </details>
+      </div>
+    <% } %>
+  </div>
+</body>
+</html>

@@ -1,0 +1,427 @@
+      </main>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script>
+    // PWA: register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => console.error('SW reg failed', err));
+      });
+    }
+
+    // PWA: install prompt UI
+    let deferredPrompt = null;
+    const installBtn = document.createElement('button');
+    installBtn.id = 'pwaInstallBtn';
+    installBtn.textContent = 'Install app';
+    installBtn.style.position = 'fixed';
+    installBtn.style.bottom = '16px';
+    installBtn.style.right = '16px';
+    installBtn.style.zIndex = '21000';
+    installBtn.style.padding = '10px 14px';
+    installBtn.style.borderRadius = '12px';
+    installBtn.style.border = 'none';
+    installBtn.style.background = '#4f46e5';
+    installBtn.style.color = '#fff';
+    installBtn.style.boxShadow = '0 8px 18px rgba(79,70,229,0.4)';
+    installBtn.style.display = 'none';
+    document.addEventListener('DOMContentLoaded', () => document.body.appendChild(installBtn));
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = 'block';
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        installBtn.style.display = 'none';
+      }
+      deferredPrompt = null;
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installBtn.style.display = 'none';
+      deferredPrompt = null;
+    });
+  </script>
+
+  <script>
+    const CURRENT_USER_ID = <%= user ? user.id : 'null' %>;
+
+    // Browser notification helper
+    let notifPermissionChecked = false;
+    const requestBrowserNotif = async () => {
+      if (!('Notification' in window)) return false;
+      if (Notification.permission === 'granted') return true;
+      if (Notification.permission === 'denied') return false;
+      try {
+        const perm = await Notification.requestPermission();
+        return perm === 'granted';
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const showBrowserNotif = async ({ title, body, link }) => {
+      if (!('Notification' in window)) return;
+      if (!notifPermissionChecked) {
+        notifPermissionChecked = true;
+        const ok = await requestBrowserNotif();
+        if (!ok) return;
+      }
+      if (Notification.permission !== 'granted') return;
+      const n = new Notification(title || 'Notification', { body: body || '', icon: '/icons/icon.svg' });
+      if (link) {
+        n.onclick = () => { window.open(link, '_blank'); };
+      }
+    };
+
+    // Lightweight beep for notifications (no external asset needed)
+    let audioCtx;
+    const playNotifSound = () => {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        audioCtx = audioCtx || new Ctx();
+        const ctx = audioCtx;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880; // A5 tone
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      } catch (e) {
+        // ignore audio errors
+      }
+    };
+
+    const toastStack = document.createElement('div');
+    toastStack.id = 'toastStack';
+    toastStack.style.position = 'fixed';
+    toastStack.style.top = '20px';
+    toastStack.style.right = '20px';
+    toastStack.style.zIndex = '20000';
+    document.body.appendChild(toastStack);
+
+    const pushToast = ({ title, message, link }) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'toast align-items-center show mb-2 shadow';
+      wrapper.role = 'alert';
+      wrapper.style.minWidth = '260px';
+      wrapper.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">
+            <div class="fw-semibold">${title || 'Notification'}</div>
+            <div class="small">${message || ''}</div>
+          </div>
+          ${link ? `<a class="btn btn-sm btn-link" href="${link}">Open</a>` : ''}
+        </div>`;
+      toastStack.appendChild(wrapper);
+      setTimeout(() => wrapper.remove(), 5000);
+    };
+
+    // Auto-hide alerts
+    setTimeout(() => {
+      const alerts = document.querySelectorAll('.alert');
+      alerts.forEach(alert => {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      });
+    }, 5000);
+
+    // Notification toggle
+    document.addEventListener('DOMContentLoaded', () => {
+      // Global search with category routing
+      const categoryBtn = document.getElementById('globalSearchCategoryBtn');
+      const searchInput = document.getElementById('globalSearchInput');
+      const searchBtn = document.getElementById('globalSearchBtn');
+      const routeMap = {
+        matter: '/matters',
+        task: '/tasks',
+        contact: '/contacts',
+        document: '/documents'
+      };
+
+      if (categoryBtn && searchInput && searchBtn) {
+        document.querySelectorAll('#globalSearchCategoryBtn + .dropdown-menu .dropdown-item').forEach(item => {
+          item.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('#globalSearchCategoryBtn + .dropdown-menu .dropdown-item').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            categoryBtn.dataset.value = item.dataset.value;
+            categoryBtn.textContent = item.textContent.trim();
+          });
+        });
+
+        const doSearch = () => {
+          const q = searchInput.value.trim();
+          const cat = categoryBtn.dataset.value || 'matter';
+          const base = routeMap[cat] || '/dashboard';
+          const url = q ? `${base}?search=${encodeURIComponent(q)}` : base;
+          window.location.href = url;
+        };
+
+        searchBtn.addEventListener('click', doSearch);
+        searchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            doSearch();
+          }
+        });
+      }
+
+      const toggle = document.getElementById('notifToggle');
+      const panel = document.getElementById('notifPanel');
+      const listEl = document.getElementById('notifList');
+      const countEl = document.getElementById('notifCount');
+      if (!toggle || !panel || !listEl || !countEl) return;
+
+      let notifications = Array.isArray(window.__APP_NOTIFS__) ? window.__APP_NOTIFS__ : [];
+
+      const renderNotifications = () => {
+        if (!notifications.length) {
+          countEl.textContent = '0';
+          listEl.innerHTML = '<div class="p-3 text-muted text-center">No new notifications</div>';
+          return;
+        }
+        countEl.textContent = notifications.length;
+        listEl.innerHTML = notifications.map(n => {
+          const color = n.type === 'approval' ? '#4f46e5' : '#f59e0b';
+          const linkHtml = n.link ? `<a href="${n.link}" class="btn btn-sm btn-outline-primary">Open</a>` : '';
+          const meta = [n.subtitle, n.meta].filter(Boolean).join(' · ');
+          return `
+            <div class="notif-item">
+              <div class="notif-dot" style="background:${color}"></div>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">${n.title || ''}</div>
+                <div class="text-muted small">${meta}</div>
+              </div>
+              ${linkHtml}
+            </div>`;
+        }).join('');
+      };
+
+      renderNotifications();
+
+      const closePanel = (e) => {
+        if (!panel.contains(e.target) && !toggle.contains(e.target)) {
+          panel.classList.add('d-none');
+          document.removeEventListener('click', closePanel);
+        }
+      };
+
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        panel.classList.toggle('d-none');
+        if (!panel.classList.contains('d-none')) {
+          document.addEventListener('click', closePanel);
+        }
+      });
+
+      const addTimeBtn = document.getElementById('globalAddTimeBtn');
+      const addTimeModalEl = document.getElementById('globalAddTimeModal');
+      const addTimeMatter = document.getElementById('globalAddTimeMatter');
+      const addTimeDate = document.getElementById('globalAddTimeDate');
+      const addTimeHours = document.getElementById('globalAddTimeHours');
+      let addTimeMattersLoaded = false;
+
+      const loadMattersForTime = async () => {
+        if (!addTimeMatter) return;
+        if (addTimeMattersLoaded) return;
+        addTimeMatter.innerHTML = '<option value="">Loading...</option>';
+        try {
+          const res = await fetch('/cost-journal/matters-options');
+          if (!res.ok) throw new Error('Failed');
+          const data = await res.json();
+          const options = ['<option value="">None</option>']
+            .concat((data.matters || []).map(m => `<option value="${m.id}">${m.matter_name}</option>`));
+          addTimeMatter.innerHTML = options.join('');
+          addTimeMattersLoaded = true;
+        } catch (err) {
+          addTimeMatter.innerHTML = '<option value="">None</option>';
+        }
+      };
+
+      if (addTimeBtn && addTimeModalEl && addTimeMatter && addTimeDate && window.bootstrap) {
+        const addTimeModal = new bootstrap.Modal(addTimeModalEl);
+        addTimeBtn.addEventListener('click', async () => {
+          addTimeDate.value = new Date().toISOString().slice(0, 10);
+          await loadMattersForTime();
+          addTimeModal.show();
+        });
+      }
+
+      // Enable tooltips for sidebar icons
+      if (window.bootstrap) {
+        document.querySelectorAll('.sidebar [data-bs-toggle="tooltip"]').forEach(el => {
+          new bootstrap.Tooltip(el);
+        });
+      }
+
+      // Cross-device start/stop timer that persists per user
+      const timerStartBtn = document.getElementById('timerStartBtn');
+      const timerStopBtn = document.getElementById('timerStopBtn');
+      const timerDisplay = document.getElementById('globalTimerDisplay');
+      let timerInterval = null;
+      let timerState = { running: false, startedAt: null, elapsedMs: 0 };
+      let serverOffsetMs = 0;
+      let stateServerTimestamp = null;
+
+      const formatTime = (ms) => {
+        const totalSeconds = Math.floor(ms / 1000);
+        const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+        const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+        const s = String(totalSeconds % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+      };
+
+      const stopInterval = () => {
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      };
+
+      const currentServerMs = () => Date.now() - (serverOffsetMs || 0);
+
+      const refreshTimerDisplay = () => {
+        if (!timerDisplay) return;
+        const base = Number(timerState.elapsedMs || 0);
+        const extra = timerState.running && stateServerTimestamp
+          ? Math.max(0, currentServerMs() - stateServerTimestamp)
+          : 0;
+        const total = timerState.running ? base + extra : base;
+        timerDisplay.textContent = formatTime(total);
+      };
+
+      const syncInterval = () => {
+        stopInterval();
+        if (timerState.running) {
+          timerInterval = setInterval(refreshTimerDisplay, 1000);
+        }
+      };
+
+      const applyTimerPayload = (data) => {
+        serverOffsetMs = data?.serverNow ? Date.now() - Number(data.serverNow) : 0;
+        stateServerTimestamp = data?.serverNow ? Number(data.serverNow) : null;
+        const state = data?.state || {};
+        timerState = {
+          running: !!state.running,
+          startedAt: state.startedAt ? new Date(state.startedAt).getTime() : null,
+          elapsedMs: Number(state.elapsedMs || 0)
+        };
+        syncInterval();
+        refreshTimerDisplay();
+      };
+
+      const fetchTimerState = async () => {
+        try {
+          const res = await fetch('/timer/state', { credentials: 'same-origin' });
+          if (!res.ok) throw new Error('Failed to load timer state');
+          const data = await res.json();
+          applyTimerPayload(data);
+        } catch (err) {
+          console.error('Timer state error', err);
+        }
+      };
+
+      const startTimer = async () => {
+        try {
+          const res = await fetch('/timer/start', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+          if (!res.ok) throw new Error('Failed to start timer');
+          const data = await res.json();
+          applyTimerPayload(data);
+        } catch (err) {
+          console.error('Start timer error', err);
+        }
+      };
+
+      const stopTimer = async () => {
+        try {
+          const res = await fetch('/timer/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+          if (!res.ok) throw new Error('Failed to stop timer');
+          const data = await res.json();
+          applyTimerPayload(data);
+
+          const elapsedMs = Number(data?.elapsedMs || 0);
+          const hoursVal = (elapsedMs / 3600000).toFixed(2);
+          if (addTimeDate) addTimeDate.value = new Date().toISOString().slice(0, 10);
+          if (addTimeHours) addTimeHours.value = hoursVal;
+          if (addTimeModalEl && addTimeMatter && window.bootstrap) {
+            await loadMattersForTime();
+            const modal = new bootstrap.Modal(addTimeModalEl);
+            modal.show();
+          }
+        } catch (err) {
+          console.error('Stop timer error', err);
+        }
+      };
+
+      fetchTimerState();
+
+      if (timerStartBtn) {
+        timerStartBtn.addEventListener('click', startTimer);
+      }
+      if (timerStopBtn) {
+        timerStopBtn.addEventListener('click', stopTimer);
+      }
+
+      // Socket-driven notifications (DM + matter chat)
+      const socket = window.appSocket || io({ transports: ['websocket', 'polling'] });
+      window.appSocket = socket;
+      socket.on('connect', () => {
+        if (CURRENT_USER_ID) socket.emit('join_user', CURRENT_USER_ID);
+      });
+
+      socket.on('matter:new', (payload) => {
+        if (!payload) return;
+        notifications.unshift({
+          type: 'chat',
+          title: 'New matter chat',
+          subtitle: payload.matter_name || 'Matter',
+          meta: payload.from_user?.full_name || '',
+          link: payload.matter_id ? `/matters/${payload.matter_id}` : null
+        });
+        renderNotifications();
+        const msgText = `${payload.from_user?.full_name || 'User'}: ${payload.message || ''}`;
+        pushToast({ title: 'Matter chat', message: msgText, link: payload.matter_id ? `/matters/${payload.matter_id}` : null });
+        showBrowserNotif({ title: 'Matter chat', body: msgText, link: payload.matter_id ? `/matters/${payload.matter_id}` : null });
+        playNotifSound();
+      });
+
+      socket.on('dm:new', (msg) => {
+        if (!msg) return;
+        const involvesMe = msg.sender?.id === CURRENT_USER_ID || msg.receiver?.id === CURRENT_USER_ID;
+        if (!involvesMe) return;
+        const otherName = msg.sender?.id === CURRENT_USER_ID ? msg.receiver?.full_name : msg.sender?.full_name;
+        const text = `${otherName || 'User'}: ${msg.message || ''}`;
+        const onChatPage = window.location.pathname.startsWith('/chat');
+        const activePeer = typeof activePeerId !== 'undefined' ? activePeerId : null;
+        const sameThreadOpen = onChatPage && activePeer && msg.sender && msg.receiver &&
+          (Number(msg.sender.id) === Number(activePeer) || Number(msg.receiver.id) === Number(activePeer));
+        // Show toasts/notifications when user is away or viewing another thread
+        const shouldNotify = !sameThreadOpen || document.hidden || !document.hasFocus();
+        if (shouldNotify) {
+          pushToast({ title: 'New direct message', message: text, link: '/chat' });
+          showBrowserNotif({ title: 'New direct message', body: text, link: '/chat' });
+          playNotifSound();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

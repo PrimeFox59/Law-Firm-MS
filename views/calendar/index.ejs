@@ -1,0 +1,343 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4 page-content">
+  <% if (!user.google_connected) { %>
+    <div class="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
+      <div>Google Calendar not connected. Sign in with Google to sync events.</div>
+      <a href="/auth/google" class="btn btn-sm btn-outline-light">Connect Google</a>
+    </div>
+  <% } %>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-3">
+      <h2 class="fw-semibold mb-0">Calendar</h2>
+      <div class="btn-group" role="group">
+        <a href="/calendar?view=schedule" class="btn btn-sm <%= view === 'schedule' ? 'btn-primary' : 'btn-outline-primary' %>">Schedule</a>
+        <a href="/calendar?view=day" class="btn btn-sm <%= view === 'day' ? 'btn-primary' : 'btn-outline-primary' %>">Day</a>
+        <a href="/calendar?view=week" class="btn btn-sm <%= view === 'week' ? 'btn-primary' : 'btn-outline-primary' %>">Week</a>
+        <a href="/calendar?view=month" class="btn btn-sm <%= view === 'month' ? 'btn-primary' : 'btn-outline-primary' %>">Month</a>
+        <a href="/calendar?view=year" class="btn btn-sm <%= view === 'year' ? 'btn-primary' : 'btn-outline-primary' %>">Year</a>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <% if (!user.google_connected) { %>
+        <a href="/auth/google" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+          <i class="fas fa-plug"></i>
+          <span>Connect Google</span>
+        </a>
+      <% } else { %>
+        <form id="syncForm" action="/calendar/sync" method="POST" class="mb-0">
+          <button type="submit" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+            <i class="fas fa-sync"></i>
+            <span>Google Sync</span>
+          </button>
+        </form>
+      <% } %>
+      <a href="/calendar/add" class="btn btn-gradient"><i class="fas fa-plus me-2"></i>Add Event</a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-9">
+      <% const currentMoment = moment(currentDate); %>
+      <% let prevDate, nextDate; %>
+      <% if (view === 'day') { %>
+        <% prevDate = currentMoment.clone().subtract(1, 'day'); %>
+        <% nextDate = currentMoment.clone().add(1, 'day'); %>
+      <% } else if (view === 'week') { %>
+        <% prevDate = currentMoment.clone().subtract(1, 'week'); %>
+        <% nextDate = currentMoment.clone().add(1, 'week'); %>
+      <% } else if (view === 'year') { %>
+        <% prevDate = currentMoment.clone().subtract(1, 'year'); %>
+        <% nextDate = currentMoment.clone().add(1, 'year'); %>
+      <% } else { %>
+        <% prevDate = currentMoment.clone().subtract(1, 'month'); %>
+        <% nextDate = currentMoment.clone().add(1, 'month'); %>
+      <% } %>
+      <% const eventsByDate = {}; %>
+      <% events.forEach(ev => { %>
+        <% const key = moment(ev.start_datetime).format('YYYY-MM-DD'); %>
+        <% if (!eventsByDate[key]) { eventsByDate[key] = []; } %>
+        <% eventsByDate[key].push({
+          title: ev.title,
+          time: moment(ev.start_datetime).format('HH:mm'),
+          matter: ev.matter ? ev.matter.matter_name : ''
+        }); %>
+      <% }); %>
+
+      <% if (view === 'year') { %>
+        <div class="glass-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-semibold"><%= currentMoment.format('YYYY') %></div>
+            <div class="btn-group btn-group-sm" role="group">
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= prevDate.format('YYYY-MM-DD') %>">&lt;</a>
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= nextDate.format('YYYY-MM-DD') %>">&gt;</a>
+            </div>
+          </div>
+          <div class="row g-4">
+            <% const months = moment.months(); %>
+            <% months.forEach((mName, idx) => { %>
+              <div class="col-md-6 col-xl-4">
+                <div class="p-2 border rounded-3 h-100">
+                  <div class="fw-semibold mb-2"><%= mName %></div>
+                  <div class="d-grid" style="grid-template-columns: repeat(7, 1fr); gap: 4px; font-size: 12px;">
+                    <% ['S','M','T','W','T','F','S'].forEach(d => { %>
+                      <div class="text-muted text-center"><%= d %></div>
+                    <% }); %>
+                    <% const first = moment({ year: currentMoment.year(), month: idx, day: 1 }); %>
+                    <% const daysInMonth = first.daysInMonth(); %>
+                    <% const startPad = first.day(); %>
+                    <% for (let i = 0; i < startPad; i++) { %>
+                      <div></div>
+                    <% } %>
+                    <% for (let d = 1; d <= daysInMonth; d++) { %>
+                      <% const dateStr = moment({ year: currentMoment.year(), month: idx, day: d }).format('YYYY-MM-DD'); %>
+                      <% const hasEvents = eventsByDate[dateStr]; %>
+                      <button type="button" class="btn btn-sm btn-light border position-relative" style="min-height:38px;" onclick="showEvents('<%= dateStr %>')">
+                        <%= d %>
+                        <% if (hasEvents) { %>
+                          <span class="position-absolute start-50 translate-middle-x" style="bottom:4px;width:6px;height:6px;border-radius:50%;background:#4f46e5;"></span>
+                        <% } %>
+                      </button>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        </div>
+      <% } else if (view === 'month') { %>
+        <div class="glass-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fw-semibold"><%= currentMoment.format('MMMM YYYY') %></div>
+            <div class="btn-group btn-group-sm" role="group">
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= prevDate.format('YYYY-MM-DD') %>">&lt;</a>
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= nextDate.format('YYYY-MM-DD') %>">&gt;</a>
+            </div>
+          </div>
+          <% const start = currentMoment.clone().startOf('month'); %>
+          <% const daysInMonth = start.daysInMonth(); %>
+          <% const startPad = start.day(); %>
+          <div class="d-grid" style="grid-template-columns: repeat(7, 1fr); gap: 8px; font-size: 12px;">
+            <% ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => { %>
+              <div class="text-muted text-center fw-semibold"><%= d %></div>
+            <% }); %>
+            <% for (let i = 0; i < startPad; i++) { %><div></div><% } %>
+            <% for (let d = 1; d <= daysInMonth; d++) { %>
+              <% const dateStr = currentMoment.clone().date(d).format('YYYY-MM-DD'); %>
+              <% const dayEvents = eventsByDate[dateStr]; %>
+              <div class="border rounded-3 p-2" style="min-height:90px;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small fw-semibold"><%= d %></span>
+                  <% if (dayEvents && dayEvents.length) { %>
+                    <span class="badge bg-primary bg-opacity-75"><%= dayEvents.length %></span>
+                  <% } %>
+                </div>
+                <% if (dayEvents) { %>
+                  <% dayEvents.slice(0,2).forEach(ev => { %>
+                    <div class="small text-truncate"><strong><%= ev.time %></strong> <%= ev.title %></div>
+                  <% }); %>
+                  <% if (dayEvents.length > 2) { %>
+                    <div class="text-primary small" onclick="showEvents('<%= dateStr %>')">+<%= dayEvents.length - 2 %> more</div>
+                  <% } %>
+                <% } %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } else if (view === 'week') { %>
+        <div class="glass-card p-3">
+          <% const weekStart = currentMoment.clone().startOf('week'); %>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fw-semibold"><%= weekStart.format('MMMM D') %> - <%= weekStart.clone().endOf('week').format('D, YYYY') %></div>
+            <div class="btn-group btn-group-sm" role="group">
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= prevDate.format('YYYY-MM-DD') %>">&lt;</a>
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= nextDate.format('YYYY-MM-DD') %>">&gt;</a>
+            </div>
+          </div>
+          <div class="row g-2">
+            <% for (let i = 0; i < 7; i++) { %>
+              <% const day = weekStart.clone().add(i, 'days'); %>
+              <% const dateStr = day.format('YYYY-MM-DD'); %>
+              <% const dayEvents = eventsByDate[dateStr]; %>
+              <div class="col-md-6 col-xl-4">
+                <div class="border rounded-3 p-2 h-100">
+                  <div class="d-flex justify-content-between mb-1">
+                    <span class="fw-semibold"><%= day.format('ddd D') %></span>
+                    <% if (dayEvents && dayEvents.length) { %>
+                      <span class="badge bg-primary bg-opacity-75"><%= dayEvents.length %></span>
+                    <% } %>
+                  </div>
+                  <% if (dayEvents) { %>
+                    <% dayEvents.forEach(ev => { %>
+                      <div class="small text-truncate"><strong><%= ev.time %></strong> <%= ev.title %></div>
+                    <% }); %>
+                  <% } else { %>
+                    <div class="text-muted small">No events</div>
+                  <% } %>
+                </div>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } else if (view === 'day') { %>
+        <div class="glass-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fw-semibold"><%= currentMoment.format('dddd, MMMM D, YYYY') %></div>
+            <div class="btn-group btn-group-sm" role="group">
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= prevDate.format('YYYY-MM-DD') %>">&lt;</a>
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= nextDate.format('YYYY-MM-DD') %>">&gt;</a>
+            </div>
+          </div>
+          <% const dateStr = currentMoment.format('YYYY-MM-DD'); %>
+          <% const dayEvents = eventsByDate[dateStr]; %>
+          <% if (dayEvents) { %>
+            <ul class="list-group list-group-flush">
+              <% dayEvents.forEach(ev => { %>
+                <li class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-semibold"><%= ev.title %></div>
+                    <div class="text-muted small"><%= ev.time %> <%= ev.matter ? '· ' + ev.matter : '' %></div>
+                  </div>
+                </li>
+              <% }); %>
+            </ul>
+          <% } else { %>
+            <div class="text-muted">No events for this day.</div>
+          <% } %>
+        </div>
+      <% } else { %>
+        <div class="glass-card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fw-semibold">Schedule</div>
+            <div class="btn-group btn-group-sm" role="group">
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= prevDate.format('YYYY-MM-DD') %>">&lt;</a>
+              <a class="btn btn-outline-secondary" href="/calendar?view=<%= view %>&date=<%= nextDate.format('YYYY-MM-DD') %>">&gt;</a>
+            </div>
+          </div>
+          <% if (events.length) { %>
+            <ul class="list-group list-group-flush">
+              <% events.forEach(ev => { %>
+                <li class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-semibold"><%= ev.title %></div>
+                    <div class="text-muted small"><%= moment(ev.start_datetime).format('ddd, MMM D • HH:mm') %> <%= ev.matter ? '· ' + ev.matter.matter_name : '' %></div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-danger" onclick="deleteEvent(<%= ev.id %>)">Delete</button>
+                </li>
+              <% }); %>
+            </ul>
+          <% } else { %>
+            <div class="text-muted">No events scheduled.</div>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="col-lg-3 d-flex flex-column gap-3">
+      <div class="glass-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold"><%= moment(currentDate).format('MMMM YYYY') %></div>
+        </div>
+        <div id="mini-cal" class="d-grid" style="grid-template-columns: repeat(7, 1fr); gap:4px; font-size:12px;"></div>
+      </div>
+
+      <div class="glass-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Event Category</div>
+          <span class="text-muted small">+</span>
+        </div>
+        <p class="text-muted small mb-0">Use categories when creating events.</p>
+      </div>
+
+      <div class="glass-card p-3">
+        <div class="fw-semibold mb-2">Profile Calendar</div>
+        <div class="d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-primary text-white fw-bold d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
+            <%= user.full_name.charAt(0).toUpperCase() %>
+          </div>
+          <div><%= user.full_name %></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const eventsByDate = <%- JSON.stringify(eventsByDate) %>;
+
+  function showEvents(dateStr) {
+    const list = (eventsByDate[dateStr] || []).map(ev => `
+      <li class="list-group-item">
+        <div class="fw-semibold">${ev.title}</div>
+        <div class="text-muted small">${ev.time}${ev.matter ? ' · ' + ev.matter : ''}</div>
+      </li>
+    `).join('');
+    if (!list) return;
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Events on ${dateStr}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <ul class="list-group list-group-flush">${list}</ul>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const bsModal = new bootstrap.Modal(modal);
+    modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    bsModal.show();
+  }
+
+  // mini calendar render current month with dots
+  (function miniCal(){
+    const container = document.getElementById('mini-cal');
+    if (!container) return;
+    const base = new Date('<%= currentDate %>');
+    const y = base.getFullYear();
+    const m = base.getMonth();
+    const first = new Date(y,m,1);
+    const last = new Date(y,m+1,0);
+    const days = ['S','M','T','W','T','F','S'];
+    days.forEach(d => {
+      const c=document.createElement('div');c.className='text-muted text-center';c.textContent=d;container.appendChild(c);
+    });
+    for(let i=0;i<first.getDay();i++){container.appendChild(document.createElement('div'));}
+    for(let d=1; d<=last.getDate(); d++){
+      const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='btn btn-light border text-center p-1 position-relative';
+      btn.textContent=d;
+      if(eventsByDate[dateStr]){
+        const dot=document.createElement('span');
+        dot.style.width='6px';dot.style.height='6px';dot.style.borderRadius='50%';dot.style.background='#4f46e5';
+        dot.className='position-absolute start-50 translate-middle-x';dot.style.bottom='4px';
+        btn.appendChild(dot);
+        btn.onclick=()=>showEvents(dateStr);
+      }
+      container.appendChild(btn);
+    }
+  })();
+
+  function deleteEvent(id) {
+    if (confirm('Delete this event?')) {
+      fetch(`/calendar/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) location.reload();
+        else alert(data.message);
+      });
+    }
+  }
+</script>
+
+<%- include('../partials/footer') %>

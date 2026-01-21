@@ -1,0 +1,61 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="mb-4">
+    <a href="/transactions?tab=deposits" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2"></i>Back
+    </a>
+  </div>
+
+  <div class="card">
+    <div class="card-header bg-primary text-white">
+      <h4 class="mb-0">Add Deposit</h4>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/transactions/deposits">
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Client *</label>
+            <select class="form-select" name="contact_id" required>
+              <option value="">Select Client</option>
+              <% contacts.forEach(c => { %>
+                <option value="<%= c.id %>"><%= c.name %></option>
+              <% }); %>
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Related Matter</label>
+            <select class="form-select" name="matter_id">
+              <option value="">None</option>
+              <% matters.forEach(m => { %>
+                <option value="<%= m.id %>"><%= m.matter_name %></option>
+              <% }); %>
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Amount *</label>
+            <input type="number" class="form-control" name="amount" step="0.01" required>
+          </div>
+
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Deposit Date *</label>
+            <input type="date" class="form-control" name="deposit_date" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          </div>
+
+          <div class="col-md-12 mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="notes" rows="3"></textarea>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">
+          <i class="fas fa-save me-2"></i>Create Deposit
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

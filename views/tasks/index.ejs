@@ -1,0 +1,167 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-tasks me-2"></i>Tasks</h2>
+    <a href="/tasks/add" class="btn btn-primary">
+      <i class="fas fa-plus me-2"></i>Add Task
+    </a>
+  </div>
+
+  <% if (tab !== 'approval' && approvalTasks && approvalTasks.length) { %>
+    <div class="card mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Needs Your Approval</h5>
+          <span class="badge bg-warning text-dark"><%= approvalTasks.length %></span>
+        </div>
+        <div class="row">
+          <% approvalTasks.forEach(item => { %>
+            <div class="col-md-6 mb-3">
+              <div class="card h-100" onclick="window.location.href='/tasks/<%= item.id %>'" role="button">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="mb-0"><%= item.title %></h6>
+                    <span class="badge bg-<%= item.priority === 'urgent' ? 'danger' : item.priority === 'high' ? 'warning' : 'info' %>"><%= item.priority %></span>
+                  </div>
+                  <p class="text-muted small mb-2"><%= item.description || 'No description' %></p>
+                  <% if (item.matter) { %>
+                    <p class="small mb-1"><i class="fas fa-briefcase me-1"></i><%= item.matter.matter_name %></p>
+                  <% } %>
+                  <p class="small mb-1"><i class="fas fa-user me-1"></i><%= item.assignee ? item.assignee.full_name : 'Unassigned' %></p>
+                  <span class="badge bg-secondary"><%= item.status.replace('_', ' ') %></span>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'all' ? 'active' : '' %>" href="/tasks?tab=all">All Tasks</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'matter' ? 'active' : '' %>" href="/tasks?tab=matter">Matter Tasks</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'personal' ? 'active' : '' %>" href="/tasks?tab=personal">Personal Tasks</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'approval' ? 'active' : '' %>" href="/tasks?tab=approval">Approval</a>
+    </li>
+  </ul>
+
+  <!-- Filter -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="GET" action="/tasks" class="row g-3">
+        <input type="hidden" name="tab" value="<%= tab %>">
+        <div class="col-md-3">
+          <select class="form-select" name="status" onchange="this.form.submit()">
+            <option value="all" <%= status === 'all' ? 'selected' : '' %>>All Status</option>
+            <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+            <option value="in_progress" <%= status === 'in_progress' ? 'selected' : '' %>>In Progress</option>
+            <option value="completed" <%= status === 'completed' ? 'selected' : '' %>>Completed</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" name="priority" onchange="this.form.submit()">
+            <option value="all" <%= priority === 'all' ? 'selected' : '' %>>All Priority</option>
+            <option value="urgent" <%= priority === 'urgent' ? 'selected' : '' %>>Urgent</option>
+            <option value="high" <%= priority === 'high' ? 'selected' : '' %>>High</option>
+            <option value="medium" <%= priority === 'medium' ? 'selected' : '' %>>Medium</option>
+            <option value="low" <%= priority === 'low' ? 'selected' : '' %>>Low</option>
+          </select>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tasks List -->
+  <div class="row">
+    <% if (tasks.length > 0) { %>
+      <% tasks.forEach(task => { %>
+        <div class="col-md-6 mb-3">
+          <div class="card h-100" role="button" onclick="window.location.href='/tasks/<%= task.id %>'">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="mb-0"><%= task.title %></h5>
+                <span class="badge bg-<%= task.priority === 'urgent' ? 'danger' : task.priority === 'high' ? 'warning' : 'info' %>">
+                  <%= task.priority %>
+                </span>
+              </div>
+              <p class="text-muted small mb-2"><%= task.description || 'No description' %></p>
+              <% if (task.matter) { %>
+                <p class="small mb-2"><i class="fas fa-briefcase me-1"></i><%= task.matter.matter_name %></p>
+              <% } %>
+              <p class="small mb-2">
+                <i class="fas fa-user me-1"></i>
+                <%= task.assignee ? task.assignee.full_name : 'Unassigned' %>
+                <% if (task.assignee) { %>
+                  <span class="badge bg-light text-dark ms-1"><%= task.assignee.account_type %></span>
+                <% } %>
+              </p>
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="badge bg-<%= task.status === 'completed' ? 'success' : task.status === 'in_progress' ? 'primary' : 'secondary' %>">
+                  <%= task.status.replace('_', ' ') %>
+                </span>
+                <div>
+                  <% if (task.creator && user && task.creator.id === user.id) { %>
+                    <button onclick="event.stopPropagation(); updateStatus(<%= task.id %>, 'completed')" class="btn btn-sm btn-success">
+                      <i class="fas fa-check"></i>
+                    </button>
+                    <button onclick="event.stopPropagation(); deleteTask(<%= task.id %>)" class="btn btn-sm btn-danger">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  <% } else { %>
+                    <span class="text-muted small">Awaiting creator approval</span>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% }); %>
+      <div class="col-12">
+        <p class="text-muted text-center">No tasks found</p>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<script>
+function updateStatus(id, status) {
+  fetch(`/tasks/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      location.reload();
+    } else {
+      alert(data.message || 'Not allowed');
+    }
+  });
+}
+
+function deleteTask(id) {
+  if (confirm('Delete this task?')) {
+    fetch(`/tasks/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) location.reload();
+    });
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>

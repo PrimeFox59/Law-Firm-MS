@@ -1,0 +1,119 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-briefcase me-2"></i>Matters</h2>
+    <a href="/matters/add" class="btn btn-primary">
+      <i class="fas fa-plus me-2"></i>Add Matter
+    </a>
+  </div>
+
+  <!-- Filter -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="GET" action="/matters" class="row g-3">
+        <div class="col-md-4">
+          <input type="text" class="form-control" name="search" placeholder="Search matters..." value="<%= search %>">
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" name="status" onchange="this.form.submit()">
+            <option value="all" <%= status === 'all' ? 'selected' : '' %>>All Status</option>
+            <option value="active" <%= status === 'active' ? 'selected' : '' %>>Active</option>
+            <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+            <option value="closed" <%= status === 'closed' ? 'selected' : '' %>>Closed</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" name="dispute" onchange="this.form.submit()">
+            <option value="all" <%= dispute === 'all' ? 'selected' : '' %>>All Types</option>
+            <option value="litigation" <%= dispute === 'litigation' ? 'selected' : '' %>>Litigation</option>
+            <option value="arbitration" <%= dispute === 'arbitration' ? 'selected' : '' %>>Arbitration</option>
+            <option value="mediation" <%= dispute === 'mediation' ? 'selected' : '' %>>Mediation</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-secondary w-100">
+            <i class="fas fa-search me-2"></i>Search
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Matters Table -->
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Matter #</th>
+              <th>Matter Name</th>
+              <th>Client</th>
+              <th>Attorney</th>
+              <th>Status</th>
+              <th>Type</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (matters.length > 0) { %>
+              <% matters.forEach(matter => { %>
+                <tr>
+                  <td><strong><%= matter.matter_number %></strong></td>
+                  <td><%= matter.matter_name %></td>
+                  <td><%= matter.client.name %></td>
+                  <td>
+                    <% const atts = (matter.responsibleAttorneys && matter.responsibleAttorneys.length)
+                      ? matter.responsibleAttorneys
+                      : (matter.responsibleAttorney ? [matter.responsibleAttorney] : []); %>
+                    <%= atts.map(a => a.full_name).join(', ') || '-' %>
+                  </td>
+                  <td>
+                    <span class="badge bg-<%= matter.status === 'active' ? 'success' : matter.status === 'pending' ? 'warning' : 'secondary' %>">
+                      <%= matter.status %>
+                    </span>
+                  </td>
+                  <td><%= matter.dispute_resolution || '-' %></td>
+                  <td>
+                    <a href="/matters/<%= matter.id %>" class="btn btn-sm btn-outline-info">
+                      <i class="fas fa-eye"></i>
+                    </a>
+                    <a href="/matters/<%= matter.id %>/edit" class="btn btn-sm btn-outline-primary">
+                      <i class="fas fa-edit"></i>
+                    </a>
+                    <button onclick="deleteMatter(<%= matter.id %>)" class="btn btn-sm btn-outline-danger">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="7" class="text-center text-muted">No matters found</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function deleteMatter(id) {
+  if (confirm('Delete this matter?')) {
+    fetch(`/matters/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) location.reload();
+      else alert(data.message);
+    });
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>

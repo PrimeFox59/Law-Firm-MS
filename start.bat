@@ -1,0 +1,3 @@
+@echo off
+echo Starting Law Firm Management System...
+call npm start

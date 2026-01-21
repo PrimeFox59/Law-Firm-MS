@@ -1,0 +1,203 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center gap-2">
+      <i class="fas fa-sitemap text-primary"></i>
+      <h4 class="mb-0">Hierarchy</h4>
+    </div>
+    <form method="POST" action="/settings/hierarchy" class="d-flex gap-2">
+      <input type="text" class="form-control form-control-sm" name="name" placeholder="New hierarchy name" style="max-width: 220px;">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-plus me-1"></i>New</button>
+    </form>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-3 col-sm-4 col-12" style="max-width: 240px; min-width: 180px;">
+      <div class="card">
+        <div class="card-body">
+          <label class="form-label">Select hierarchy</label>
+          <select id="hierarchySelect" class="form-select" style="max-width: 260px; min-width: 180px;">
+            <% if (hierarchies.length === 0) { %>
+              <option value="" disabled selected>No hierarchy yet</option>
+            <% } %>
+            <% hierarchies.forEach(h => { %>
+              <option value="<%= h.id %>" <%= String(h.id) === String(selectedId) ? 'selected' : '' %>><%= h.name %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-9">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center flex-wrap gap-3 mb-3">
+            <div class="flex-grow-1">
+              <label class="form-label mb-1 small text-muted">Hierarchy name</label>
+              <input type="text" class="form-control" id="hierarchyName" value="<%= (hierarchies.find(h => String(h.id) === String(selectedId)) || {}).name || '' %>" placeholder="Hierarchy name">
+            </div>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+              <button class="btn btn-outline-secondary btn-sm" id="addRootBtn" type="button"><i class="fas fa-plus me-1"></i>Root</button>
+              <button class="btn btn-primary btn-sm" id="saveHierarchyBtn" type="button"><i class="fas fa-save me-1"></i>Save</button>
+            </div>
+          </div>
+
+          <div class="hint-bar d-flex align-items-center gap-3 mb-3">
+            <div class="d-flex align-items-center gap-2 text-muted small">
+              <i class="fas fa-arrows-alt text-primary"></i>
+              <span>Drag to reorder, scroll horizontally for deep levels.</span>
+            </div>
+            <div class="d-flex align-items-center gap-2 text-muted small">
+              <i class="fas fa-plus-circle text-success"></i>
+              <span>Use + to add children.</span>
+            </div>
+            <div class="d-flex align-items-center gap-2 text-muted small">
+              <i class="fas fa-trash text-danger"></i>
+              <span>Trash removes the node.</span>
+            </div>
+          </div>
+
+          <div class="tree-shell">
+            <div id="treeContainer"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .tree-shell { position: relative; border: 1px solid #e5e7eb; border-radius: 12px; background: #f8fafc; padding: 12px; min-height: 320px; overflow: hidden; }
+  .tree-shell::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(248,250,252,0) 0%, rgba(248,250,252,0) 92%, rgba(248,250,252,0.9) 100%); }
+  #treeContainer { overflow-x: auto; padding-bottom: 8px; }
+  #treeContainer::-webkit-scrollbar { height: 10px; }
+  #treeContainer::-webkit-scrollbar-thumb { background: #cfd4dc; border-radius: 999px; }
+  #treeContainer::-webkit-scrollbar-track { background: #eef1f5; }
+  .tree-list { list-style: none; padding-left: 0; margin-bottom: 0; min-width: 780px; }
+  .tree-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; width: 100%; box-shadow: 0 4px 10px rgba(0,0,0,0.04); transition: border-color 0.15s, box-shadow 0.15s; }
+  .tree-item:hover { border-color: #c7d2fe; box-shadow: 0 6px 14px rgba(99,102,241,0.08); }
+  .tree-item .node-title { flex: 1 1 360px; min-width: 240px; max-width: 100%; font-size: 14px; padding: 8px 10px; border-radius: 10px; }
+  .tree-children { list-style: none; padding-left: 20px; margin-top: 8px; margin-bottom: 0; border-left: 2px dashed #e5e7eb; }
+  .drag-handle { cursor: grab; color: #6b7280; flex-shrink: 0; padding: 6px; border-radius: 8px; }
+  .drag-handle:hover { background: #eef2ff; color: #4f46e5; }
+  .node-actions { flex-shrink: 0; }
+  .node-actions button { border: none; background: #eef2ff; color: #4f46e5; width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
+  .node-actions button:hover { background: #4f46e5; color: #fff; }
+  .node-actions .btn-del { background: #fee2e2; color: #b91c1c; }
+  .node-actions .btn-del:hover { background: #b91c1c; color: #fff; }
+  .hint-bar { background: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 10px 12px; }
+  @media (max-width: 768px) {
+    .tree-list { min-width: 540px; }
+    .tree-item { flex-wrap: wrap; }
+    .tree-item .node-title { flex-basis: 100%; min-width: 320px; }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+  const initialTree = <%- JSON.stringify(treeData || []) %>;
+  const selectedId = '<%= selectedId || '' %>';
+  const treeContainer = document.getElementById('treeContainer');
+  const addRootBtn = document.getElementById('addRootBtn');
+  const saveBtn = document.getElementById('saveHierarchyBtn');
+  const nameInput = document.getElementById('hierarchyName');
+  const selectEl = document.getElementById('hierarchySelect');
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      const id = selectEl.value;
+      if (id) window.location.href = `/settings/hierarchy?id=${id}`;
+    });
+  }
+
+  const makeId = () => 'node-' + Math.random().toString(36).slice(2, 8);
+
+  const createNodeEl = (node) => {
+    const li = document.createElement('li');
+    li.className = 'tree-item';
+    li.dataset.id = node.id;
+
+    li.innerHTML = `
+      <i class="fas fa-grip-vertical drag-handle"></i>
+      <input class="form-control form-control-sm node-title" value="${node.title || ''}" />
+      <div class="node-actions d-flex gap-2">
+        <button type="button" class="btn-add" title="Add child"><i class="fas fa-plus"></i></button>
+        <button type="button" class="btn-del" title="Delete"><i class="fas fa-trash"></i></button>
+      </div>
+    `;
+
+    const childrenUl = document.createElement('ul');
+    childrenUl.className = 'tree-children';
+    li.appendChild(childrenUl);
+
+    (node.children || []).forEach(child => {
+      childrenUl.appendChild(createNodeEl(child));
+    });
+
+    new Sortable(childrenUl, { group: 'nested', handle: '.drag-handle', animation: 150, fallbackOnBody: true, swapThreshold: 0.5 });
+
+    li.querySelector('.btn-add').addEventListener('click', () => {
+      const child = { id: makeId(), title: 'New node', children: [] };
+      childrenUl.appendChild(createNodeEl(child));
+    });
+
+    li.querySelector('.btn-del').addEventListener('click', () => {
+      li.remove();
+    });
+
+    return li;
+  };
+
+  const renderTree = (nodes) => {
+    treeContainer.innerHTML = '';
+    const ul = document.createElement('ul');
+    ul.className = 'tree-list';
+    treeContainer.appendChild(ul);
+    nodes.forEach(n => ul.appendChild(createNodeEl(n)));
+    new Sortable(ul, { group: 'nested', handle: '.drag-handle', animation: 150, fallbackOnBody: true, swapThreshold: 0.5 });
+  };
+
+  const serialize = (ul) => {
+    const items = Array.from(ul.children);
+    return items.map(li => {
+      const title = li.querySelector('.node-title').value.trim();
+      const childrenUl = li.querySelector('.tree-children');
+      return {
+        id: li.dataset.id,
+        title: title || 'Untitled',
+        children: serialize(childrenUl)
+      };
+    });
+  };
+
+  addRootBtn?.addEventListener('click', () => {
+    const ul = treeContainer.querySelector('.tree-list');
+    if (!ul) return;
+    ul.appendChild(createNodeEl({ id: makeId(), title: 'New node', children: [] }));
+  });
+
+  saveBtn?.addEventListener('click', async () => {
+    if (!selectedId) {
+      alert('Create or select a hierarchy first.');
+      return;
+    }
+    const ul = treeContainer.querySelector('.tree-list');
+    const payload = serialize(ul);
+    const name = nameInput.value.trim();
+    const res = await fetch(`/settings/hierarchy/${selectedId}/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: payload, name })
+    });
+    if (res.ok) {
+      alert('Hierarchy saved');
+      window.location.href = `/settings/hierarchy?id=${selectedId}`;
+    } else {
+      alert('Failed to save');
+    }
+  });
+
+  renderTree(initialTree.length ? initialTree : [{ id: makeId(), title: 'Start here', children: [] }]);
+</script>
+
+<%- include('../partials/footer') %>

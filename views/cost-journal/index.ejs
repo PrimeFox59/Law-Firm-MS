@@ -1,0 +1,218 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-book me-2"></i>Cost Journal</h2>
+    <div>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#expenseModal">
+        <i class="fas fa-receipt me-2"></i>Add Expense
+      </button>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card stat-card info">
+        <div class="card-body">
+          <small class="text-muted">Total Hours</small>
+          <h4><%= totals.hours.toFixed(2) %></h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card stat-card success">
+        <div class="card-body">
+          <small class="text-muted">Billable</small>
+          <h4>Rp <%= totals.billable.toLocaleString() %></h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card stat-card warning">
+        <div class="card-body">
+          <small class="text-muted">Non-Billable</small>
+          <h4>Rp <%= totals.nonBillable.toLocaleString() %></h4>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card stat-card danger">
+        <div class="card-body">
+          <small class="text-muted">Expenses</small>
+          <h4>Rp <%= totals.expenses.toLocaleString() %></h4>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="GET" action="/cost-journal" class="row g-3">
+        <div class="col-md-3">
+          <select class="form-select" name="type" onchange="this.form.submit()">
+            <option value="all" <%= type === 'all' ? 'selected' : '' %>>All Types</option>
+            <option value="time" <%= type === 'time' ? 'selected' : '' %>>Time Only</option>
+            <option value="expense" <%= type === 'expense' ? 'selected' : '' %>>Expense Only</option>
+          </select>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Journals Table -->
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Matter</th>
+              <th>Hours/Amount</th>
+              <th>Billable</th>
+              <th>Approval</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (journals.length > 0) { %>
+              <% journals.forEach(j => { %>
+                <tr>
+                  <td><%= moment(j.date).format('MMM DD, YYYY') %></td>
+                  <td><span class="badge <%= j.entry_type === 'time' ? 'bg-primary' : 'bg-warning' %>"><%= j.entry_type %></span></td>
+                  <td><%= j.description %></td>
+                  <td><%= j.matter ? j.matter.matter_name : '-' %></td>
+                  <td>
+                    <% if (j.entry_type === 'time') { %>
+                      <%= j.hours %>h × Rp <%= parseFloat(j.rate).toLocaleString() %>
+                    <% } else { %>
+                      Rp <%= parseFloat(j.amount).toLocaleString() %>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (j.is_billable) { %>
+                      <span class="badge bg-success">Yes</span>
+                    <% } else { %>
+                      <span class="badge bg-secondary">No</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <% if (j.approval) { %>
+                      <% if (j.approval.status === 'pending') { %>
+                        <span class="badge bg-warning text-dark">Pending</span>
+                      <% } else if (j.approval.status === 'approved') { %>
+                        <span class="badge bg-success">Approved</span>
+                      <% } else { %>
+                        <span class="badge bg-danger">Rejected</span>
+                      <% } %>
+                    <% } else { %>
+                      <span class="badge bg-light text-muted">Not submitted</span>
+                    <% } %>
+                  </td>
+                  <td>
+                      <% const canSubmit = (!j.approval || j.approval.status === 'rejected') && j.user_id === user.id && !j.is_billed; %>
+                      <% const canApprove = j.approval && j.approval.status === 'pending' && (j.approval.approver_id === user.id || user.account_type === 'admin'); %>
+                      <% if (canSubmit) { %>
+                        <form action="/cost-journal/<%= j.id %>/submit" method="POST" class="d-inline">
+                          <button class="btn btn-sm btn-outline-primary">Submit</button>
+                        </form>
+                      <% } %>
+                      <% if (canApprove) { %>
+                        <form action="/cost-journal/<%= j.id %>/approve" method="POST" class="d-inline ms-1">
+                          <button class="btn btn-sm btn-success">Approve</button>
+                        </form>
+                        <form action="/cost-journal/<%= j.id %>/reject" method="POST" class="d-inline ms-1">
+                          <button class="btn btn-sm btn-outline-danger">Reject</button>
+                        </form>
+                      <% } %>
+                      <button onclick="deleteEntry(<%= j.id %>)" class="btn btn-sm btn-outline-danger ms-1" <%= j.is_billed ? 'disabled' : '' %>>
+                        <i class="fas fa-trash"></i>
+                      </button>
+                  </td>
+                </tr>
+              <% }); %>
+            <% } else { %>
+              <tr>
+                <td colspan="8" class="text-center text-muted">No entries found</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Expense Modal -->
+<div class="modal fade" id="expenseModal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Expense Entry</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="/cost-journal/expense">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-control" name="date" value="<%= moment().format('YYYY-MM-DD') %>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Matter</label>
+            <select class="form-select" name="matter_id">
+              <option value="">None</option>
+              <% matters.forEach(m => { %>
+                <option value="<%= m.id %>"><%= m.matter_name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <input type="text" class="form-control" name="expense_category" placeholder="Transportation, Meals, etc.">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" name="description" required></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Amount</label>
+            <input type="number" class="form-control" name="amount" step="0.01" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Billable?</label>
+            <select class="form-select" name="is_billable">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function deleteEntry(id) {
+  if (confirm('Delete this entry?')) {
+    fetch(`/cost-journal/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) location.reload();
+      else alert(data.message);
+    });
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>

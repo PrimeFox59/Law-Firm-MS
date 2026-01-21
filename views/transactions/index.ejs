@@ -1,0 +1,356 @@
+<%- include('../partials/header') %>
+
+<div class="container-fluid p-4">
+  <h2 class="mb-4"><i class="fas fa-exchange-alt me-2"></i>Transactions</h2>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'invoices' ? 'active' : '' %>" href="/transactions?tab=invoices">Invoices</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'payments' ? 'active' : '' %>" href="/transactions?tab=payments">Payment Proofs</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'deposits' ? 'active' : '' %>" href="/transactions?tab=deposits">Deposits</a>
+    </li>
+  </ul>
+
+  <% if (tab === 'invoices') { %>
+    <!-- Invoices Tab -->
+    <div class="card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Invoice #</th>
+                <th>Client</th>
+                <th>Total Amount</th>
+                <th>Paid Amount</th>
+                <th>Balance</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (invoices.length > 0) { %>
+                <% invoices.forEach(inv => { %>
+                  <tr class="transaction-row" data-info='<%- JSON.stringify({
+                    type: "invoice",
+                    invoiceNumber: inv.invoice_number,
+                    client: inv.contact ? inv.contact.name : "-",
+                    matter: inv.matter ? inv.matter.matter_name : "-",
+                    total: Number(inv.total_amount),
+                    paid: Number(inv.paid_amount),
+                    balance: Number(inv.total_amount) - Number(inv.paid_amount),
+                    status: inv.status,
+                    issueDate: inv.issue_date,
+                    dueDate: inv.due_date,
+                    creator: inv.creator ? inv.creator.full_name : null,
+                    creatorEmail: inv.creator ? inv.creator.email : null
+                  }).replace(/'/g, "&#39;") %>'>
+                    <td><a href="/invoices/<%= inv.id %>"><%= inv.invoice_number %></a></td>
+                    <td><%= inv.contact.name %></td>
+                    <td>Rp <%= parseFloat(inv.total_amount).toLocaleString() %></td>
+                    <td>Rp <%= parseFloat(inv.paid_amount).toLocaleString() %></td>
+                    <td>Rp <%= (parseFloat(inv.total_amount) - parseFloat(inv.paid_amount)).toLocaleString() %></td>
+                    <td>
+                      <span class="badge bg-<%= inv.status === 'paid' ? 'success' : inv.status === 'partial' ? 'warning' : 'secondary' %>">
+                        <%= inv.status %>
+                      </span>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No invoices found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% } else if (tab === 'payments') { %>
+    <!-- Payment Proofs Tab -->
+    <div class="mb-3">
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#paymentModal">
+        <i class="fas fa-upload me-2"></i>Upload Payment Proof
+      </button>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Invoice</th>
+                <th>Amount</th>
+                <th>Method</th>
+                <th>Proof</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (payments.length > 0) { %>
+                <% payments.forEach(p => { %>
+                  <tr class="transaction-row" data-info='<%- JSON.stringify({
+                    type: "payment",
+                    date: p.payment_date,
+                    invoiceNumber: p.invoice ? p.invoice.invoice_number : "-",
+                    client: p.invoice && p.invoice.contact ? p.invoice.contact.name : "-",
+                    matter: p.invoice && p.invoice.matter ? p.invoice.matter.matter_name : "-",
+                    amount: Number(p.amount),
+                    method: p.payment_method || "-",
+                    proof: p.proof_file || null,
+                    notes: p.notes || "-",
+                    uploader: p.uploader ? p.uploader.full_name : null,
+                    uploaderEmail: p.uploader ? p.uploader.email : null
+                  }).replace(/'/g, "&#39;") %>'>
+                    <td><%= moment(p.payment_date).format('MMM DD, YYYY') %></td>
+                    <td><%= p.invoice.invoice_number %></td>
+                    <td>Rp <%= parseFloat(p.amount).toLocaleString() %></td>
+                    <td><%= p.payment_method || '-' %></td>
+                    <td>
+                      <% if (p.proof_file) { %>
+                        <a href="/<%= p.proof_file %>" target="_blank" class="btn btn-sm btn-outline-primary">
+                          <i class="fas fa-file"></i> View
+                        </a>
+                      <% } else { %>
+                        -
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="5" class="text-center text-muted">No payment proofs found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% } else if (tab === 'deposits') { %>
+    <!-- Deposits Tab -->
+    <div class="mb-3">
+      <a href="/transactions/deposits/add" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Add Deposit
+      </a>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Client</th>
+                <th>Matter</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (deposits.length > 0) { %>
+                <% deposits.forEach(d => { %>
+                  <tr class="transaction-row" data-info='<%- JSON.stringify({
+                    type: "deposit",
+                    date: d.deposit_date,
+                    client: d.contact ? d.contact.name : "-",
+                    matter: d.matter ? d.matter.matter_name : "-",
+                    amount: Number(d.amount),
+                    status: d.status,
+                    notes: d.notes || "-",
+                    creator: d.creator ? d.creator.full_name : null,
+                    creatorEmail: d.creator ? d.creator.email : null
+                  }).replace(/'/g, "&#39;") %>'>
+                    <td><%= moment(d.deposit_date).format('MMM DD, YYYY') %></td>
+                    <td><%= d.contact.name %></td>
+                    <td><%= d.matter ? d.matter.matter_name : '-' %></td>
+                    <td>Rp <%= parseFloat(d.amount).toLocaleString() %></td>
+                    <td>
+                      <span class="badge bg-<%= d.status === 'active' ? 'success' : d.status === 'refunded' ? 'warning' : 'secondary' %>">
+                        <%= d.status %>
+                      </span>
+                    </td>
+                    <td>
+                      <% if (d.status === 'active') { %>
+                        <button onclick="refundDeposit(<%= d.id %>)" class="btn btn-sm btn-outline-warning">
+                          <i class="fas fa-undo"></i> Refund
+                        </button>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No deposits found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% } %>
+</div>
+
+<!-- Upload Payment Proof Modal -->
+<div class="modal fade" id="paymentModal">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Upload Payment Proof</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="/transactions/payments" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Invoice</label>
+            <select class="form-select" name="invoice_id" required>
+              <option value="">Select Invoice</option>
+              <% if (typeof invoices !== 'undefined' && invoices.length > 0) { %>
+                <% invoices.forEach(inv => { %>
+                  <option value="<%= inv.id %>"><%= inv.invoice_number %> - <%= inv.contact.name %></option>
+                <% }); %>
+              <% } %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Payment Date</label>
+            <input type="date" class="form-control" name="payment_date" value="<%= new Date().toISOString().split('T')[0] %>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Amount</label>
+            <input type="number" class="form-control" name="amount" step="0.01" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Payment Method</label>
+            <input type="text" class="form-control" name="payment_method" placeholder="Bank Transfer, Cash, etc.">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Proof File</label>
+            <input type="file" class="form-control" name="proof_file" accept="image/*,application/pdf">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="notes" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Transaction Detail Modal -->
+<div class="modal fade" id="transactionDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Transaction Detail</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <dl class="row" id="transaction-detail-list"></dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function formatCurrency(value) {
+  return isNaN(value) ? '-' : 'Rp ' + Number(value).toLocaleString();
+}
+
+function buildDetailRows(info) {
+  const rows = [];
+
+  if (info.type === 'invoice') {
+    rows.push({ label: 'Type', value: 'Invoice' });
+    rows.push({ label: 'Invoice #', value: info.invoiceNumber });
+    rows.push({ label: 'Client', value: info.client });
+    rows.push({ label: 'Matter', value: info.matter });
+    rows.push({ label: 'Issue Date', value: info.issueDate ? new Date(info.issueDate).toDateString() : '-' });
+    rows.push({ label: 'Due Date', value: info.dueDate ? new Date(info.dueDate).toDateString() : '-' });
+    rows.push({ label: 'Total', value: formatCurrency(info.total) });
+    rows.push({ label: 'Paid', value: formatCurrency(info.paid) });
+    rows.push({ label: 'Balance', value: formatCurrency(info.balance) });
+    rows.push({ label: 'Status', value: info.status });
+    rows.push({ label: 'Created By', value: info.creator ? `${info.creator}${info.creatorEmail ? ' (' + info.creatorEmail + ')' : ''}` : '-' });
+  } else if (info.type === 'payment') {
+    rows.push({ label: 'Type', value: 'Payment Proof' });
+    rows.push({ label: 'Date', value: info.date ? new Date(info.date).toDateString() : '-' });
+    rows.push({ label: 'Invoice #', value: info.invoiceNumber });
+    rows.push({ label: 'Client', value: info.client });
+    rows.push({ label: 'Matter', value: info.matter });
+    rows.push({ label: 'Amount', value: formatCurrency(info.amount) });
+    rows.push({ label: 'Method', value: info.method });
+    rows.push({ label: 'Notes', value: info.notes || '-' });
+    rows.push({ label: 'Uploaded By', value: info.uploader ? `${info.uploader}${info.uploaderEmail ? ' (' + info.uploaderEmail + ')' : ''}` : '-' });
+    rows.push({ label: 'Proof', value: info.proof ? '<a href="/' + info.proof + '" target="_blank">View File</a>' : '-' });
+  } else if (info.type === 'deposit') {
+    rows.push({ label: 'Type', value: 'Deposit' });
+    rows.push({ label: 'Date', value: info.date ? new Date(info.date).toDateString() : '-' });
+    rows.push({ label: 'Client', value: info.client });
+    rows.push({ label: 'Matter', value: info.matter });
+    rows.push({ label: 'Amount', value: formatCurrency(info.amount) });
+    rows.push({ label: 'Status', value: info.status });
+    rows.push({ label: 'Notes', value: info.notes || '-' });
+    rows.push({ label: 'Created By', value: info.creator ? `${info.creator}${info.creatorEmail ? ' (' + info.creatorEmail + ')' : ''}` : '-' });
+  }
+
+  return rows.map(r => `
+    <dt class="col-sm-4">${r.label}</dt>
+    <dd class="col-sm-8">${r.value}</dd>
+  `).join('');
+}
+
+function bindTransactionDetail() {
+  const rows = document.querySelectorAll('.transaction-row');
+  const detailList = document.getElementById('transaction-detail-list');
+  const modalEl = document.getElementById('transactionDetailModal');
+  if (!rows.length || !detailList || !modalEl) return;
+
+  const modal = new bootstrap.Modal(modalEl);
+
+  rows.forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => {
+      try {
+        const info = JSON.parse(row.dataset.info);
+        detailList.innerHTML = buildDetailRows(info);
+        modal.show();
+      } catch (err) {
+        console.error('Failed to open transaction detail', err);
+      }
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', bindTransactionDetail);
+
+function refundDeposit(id) {
+  if (confirm('Refund this deposit?')) {
+    fetch(`/transactions/deposits/${id}/refund`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) location.reload();
+    });
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>
